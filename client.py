@@ -717,17 +717,33 @@ class GeminiClient:
             self.reset()
         
         # 处理输入
-        text = ""
+        text_parts = []
         images = []
         
         if messages:
-            # OpenAI 格式
+            # OpenAI 格式 - 合并所有消息
             for msg in messages:
-                if msg.get("role") == "user":
-                    t, imgs = self._parse_content(msg.get("content", ""))
-                    text = t
-                    images = imgs
-                    self.messages.append(Message(role="user", content=msg.get("content")))
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                
+                if role == "user":
+                    t, imgs = self._parse_content(content)
+                    if t:
+                        text_parts.append(t)
+                    if imgs:
+                        images.extend(imgs)
+                elif role == "assistant":
+                    # 助手消息也加入上下文
+                    if isinstance(content, str) and content:
+                        text_parts.append(f"[助手回复]: {content}")
+                elif role == "system":
+                    # system 消息作为前置指令
+                    if isinstance(content, str) and content:
+                        text_parts.insert(0, content)
+                
+                self.messages.append(Message(role=role, content=content))
+            
+            text = "\n\n".join(text_parts)
         elif message:
             text = message
             self.messages.append(Message(role="user", content=message))
@@ -746,6 +762,8 @@ class GeminiClient:
                         images = [{"mime_type": mime, "data": base64.b64encode(resp.content).decode()}]
                     except:
                         pass
+        else:
+            text = ""
         
         if not text:
             raise ValueError("消息内容不能为空")

@@ -22,13 +22,13 @@ import hashlib
 import secrets
 
 # ============ 配置 ============
-API_KEY = "sk-gemini"
+API_KEY = "sk-geminiluocai1111111111"
 HOST = "0.0.0.0"
-PORT = 8000
+PORT = 8222
 CONFIG_FILE = "config_data.json"
 # 后台登录账号密码
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "admin123"
+ADMIN_USERNAME = "luocai"
+ADMIN_PASSWORD = "luocai123"
 # ==============================
 
 app = FastAPI(title="Gemini OpenAI API", version="1.0.0")
@@ -218,6 +218,85 @@ def fetch_tokens_from_page(cookies_str: str) -> dict:
         return result
 
 _client = None
+
+
+# ============ Tools 支持 ============
+def build_tools_prompt(tools: List[Dict]) -> str:
+    """将 tools 定义转换为提示词"""
+    if not tools:
+        return ""
+    
+    tools_schema = json.dumps([{
+        "name": t["function"]["name"],
+        "description": t["function"].get("description", ""),
+        "parameters": t["function"].get("parameters", {})
+    } for t in tools if t.get("type") == "function"], ensure_ascii=False, indent=2)
+    
+    prompt = f"""[系统指令] 你必须作为函数调用代理。不要自己回答问题，必须调用函数。
+
+可用函数:
+{tools_schema}
+
+严格规则:
+1. 你不能直接回答用户问题
+2. 你必须选择一个函数并调用它
+3. 只输出以下格式，不要有任何其他文字:
+```tool_call
+{{"name": "函数名", "arguments": {{"参数": "值"}}}}
+```
+
+用户请求: """
+    return prompt
+
+
+def parse_tool_calls(content: str) -> tuple:
+    """
+    解析响应中的工具调用
+    返回: (tool_calls列表, 剩余文本内容)
+    """
+    tool_calls = []
+    
+    # 多种匹配模式
+    patterns = [
+        r'```tool_call\s*\n?(.*?)\n?```',  # ```tool_call ... ```
+        r'```json\s*\n?(.*?)\n?```',        # ```json ... ``` (有时模型会用这个)
+        r'```\s*\n?(\{[^`]*"name"[^`]*\})\n?```',  # ``` {...} ```
+    ]
+    
+    matches = []
+    for pattern in patterns:
+        found = re.findall(pattern, content, re.DOTALL)
+        matches.extend(found)
+    
+    # 也尝试直接匹配 JSON 对象（没有代码块包裹的情况）
+    if not matches:
+        json_pattern = r'\{[^{}]*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[^{}]*\}[^{}]*\}'
+        matches = re.findall(json_pattern, content, re.DOTALL)
+    
+    for i, match in enumerate(matches):
+        try:
+            match = match.strip()
+            # 尝试解析 JSON
+            call_data = json.loads(match)
+            if call_data.get("name"):
+                tool_calls.append({
+                    "id": f"call_{uuid.uuid4().hex[:8]}",
+                    "type": "function",
+                    "function": {
+                        "name": call_data.get("name", ""),
+                        "arguments": json.dumps(call_data.get("arguments", {}), ensure_ascii=False)
+                    }
+                })
+        except json.JSONDecodeError:
+            continue
+    
+    # 移除工具调用部分
+    remaining = content
+    for pattern in patterns:
+        remaining = re.sub(pattern, '', remaining, flags=re.DOTALL)
+    remaining = remaining.strip()
+    
+    return tool_calls, remaining
 
 
 def load_config():
@@ -893,10 +972,22 @@ class ChatMessage(BaseModel):
         extra = "ignore"
 
 
+class FunctionDefinition(BaseModel):
+    name: str
+    description: Optional[str] = None
+    parameters: Optional[Dict[str, Any]] = None
+
+class ToolDefinition(BaseModel):
+    type: str = "function"
+    function: FunctionDefinition
+
 class ChatCompletionRequest(BaseModel):
     model: str = "gemini"
     messages: List[ChatMessage]
     stream: Optional[bool] = False
+    # Tools 支持
+    tools: Optional[List[ToolDefinition]] = None
+    tool_choice: Optional[Union[str, Dict[str, Any]]] = None
     # OpenAI SDK 可能发送的额外字段
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
@@ -1028,7 +1119,8 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
     request_log = {
         "model": request.model,
         "stream": request.stream,
-        "messages": []
+        "messages": [],
+        "tools": [t.model_dump() for t in request.tools] if request.tools else None
     }
     for m in request.messages:
         msg_log = {"role": m.role}
@@ -1036,7 +1128,6 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
             content_log = []
             for item in m.content:
                 if item.get("type") == "image_url":
-                    # 图片内容只记录前100字符
                     img_url = item.get("image_url", {})
                     if isinstance(img_url, dict):
                         url = img_url.get("url", "")
@@ -1053,35 +1144,44 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
     try:
         client = get_client()
         
-        # 判断是否需要重置会话
-        # 如果不是上一次对话的延续，则重置
         if not is_continuation(request.messages, _last_user_messages_hash):
             client.reset()
         
-        # 处理消息，支持 OpenAI 格式的图片 (base64)
+        # 处理消息
         messages = []
         for m in request.messages:
             content = m.content
-            # 如果 content 是列表 (包含图片)，保持原样传递
             if isinstance(content, list):
                 messages.append({"role": m.role, "content": content})
             else:
                 messages.append({"role": m.role, "content": content})
         
-        response = client.chat(messages=messages, model=request.model)
+        # 如果有 tools，把工具提示词直接加到用户消息前面
+        if request.tools and len(messages) > 0:
+            tools_prompt = build_tools_prompt([t.model_dump() for t in request.tools])
+            for i in range(len(messages) - 1, -1, -1):
+                if messages[i]["role"] == "user":
+                    original = messages[i]["content"]
+                    if isinstance(original, str):
+                        messages[i]["content"] = tools_prompt + original
+                    break
         
-        # 更新消息 hash（包含本次的完整用户消息）
+        response = client.chat(messages=messages, model=request.model)
         _last_user_messages_hash = get_user_messages_hash(request.messages)
         
-        # 原样返回响应内容，不做任何格式化处理
         reply_content = response.choices[0].message.content
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
         created_time = int(time.time())
         
+        # 解析工具调用
+        tool_calls = []
+        final_content = reply_content
+        if request.tools:
+            tool_calls, final_content = parse_tool_calls(reply_content)
+        
         # 处理流式响应
         if request.stream:
             async def generate_stream():
-                # 发送角色信息
                 chunk_data = {
                     "id": completion_id,
                     "object": "chat.completion.chunk",
@@ -1095,21 +1195,35 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
                 }
                 yield f"data: {json.dumps(chunk_data)}\n\n"
                 
-                # 发送内容
-                chunk_data = {
-                    "id": completion_id,
-                    "object": "chat.completion.chunk",
-                    "created": created_time,
-                    "model": request.model,
-                    "choices": [{
-                        "index": 0,
-                        "delta": {"content": reply_content},
-                        "finish_reason": None
-                    }]
-                }
-                yield f"data: {json.dumps(chunk_data)}\n\n"
+                if tool_calls:
+                    # 流式返回工具调用
+                    for tc in tool_calls:
+                        chunk_data = {
+                            "id": completion_id,
+                            "object": "chat.completion.chunk",
+                            "created": created_time,
+                            "model": request.model,
+                            "choices": [{
+                                "index": 0,
+                                "delta": {"tool_calls": [tc]},
+                                "finish_reason": None
+                            }]
+                        }
+                        yield f"data: {json.dumps(chunk_data)}\n\n"
+                else:
+                    chunk_data = {
+                        "id": completion_id,
+                        "object": "chat.completion.chunk",
+                        "created": created_time,
+                        "model": request.model,
+                        "choices": [{
+                            "index": 0,
+                            "delta": {"content": final_content},
+                            "finish_reason": None
+                        }]
+                    }
+                    yield f"data: {json.dumps(chunk_data)}\n\n"
                 
-                # 发送结束标记
                 chunk_data = {
                     "id": completion_id,
                     "object": "chat.completion.chunk",
@@ -1118,7 +1232,7 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
                     "choices": [{
                         "index": 0,
                         "delta": {},
-                        "finish_reason": "stop"
+                        "finish_reason": "tool_calls" if tool_calls else "stop"
                     }]
                 }
                 yield f"data: {json.dumps(chunk_data)}\n\n"
@@ -1134,18 +1248,26 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
                 }
             )
         
+        # 构建响应消息
+        response_message = {"role": "assistant"}
+        if tool_calls:
+            response_message["content"] = final_content if final_content else None
+            response_message["tool_calls"] = tool_calls
+            finish_reason = "tool_calls"
+        else:
+            response_message["content"] = final_content
+            finish_reason = "stop"
+        
         response_data = ChatCompletionResponse(
             id=completion_id,
             created=created_time,
             model=request.model,
-            choices=[ChatCompletionChoice(index=0, message={"role": "assistant", "content": reply_content}, finish_reason="stop")],
+            choices=[ChatCompletionChoice(index=0, message=response_message, finish_reason=finish_reason)],
             usage=Usage(prompt_tokens=response.usage.prompt_tokens, completion_tokens=response.usage.completion_tokens, total_tokens=response.usage.total_tokens)
         )
         
-        # 记录完整响应
         log_api_call(request_log, response_data.model_dump())
         
-        # 使用 JSONResponse 确保正确的 Content-Type 和响应头
         return JSONResponse(
             content=response_data.model_dump(),
             headers={
@@ -1160,7 +1282,6 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
         error_msg = str(e)
         print(f"[ERROR] Chat error: {error_msg}")
         traceback.print_exc()
-        # 记录错误日志
         log_api_call(request_log, None, error=error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
 

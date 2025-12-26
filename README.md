@@ -8,9 +8,23 @@
 - ✅ 多轮对话（上下文保持）
 - ✅ 图片识别（支持 base64 和 URL）
 - ✅ 流式响应（Streaming）
+- ✅ **Tools / Function Calling 支持** 🆕
 - ✅ OpenAI SDK 完全兼容
 - ✅ Web 后台配置界面
 - ✅ 后台登录认证
+
+## 📝 更新日志
+
+### v1.1.0 (2025-12-26)
+- 🆕 新增 Tools / Function Calling 支持
+  - 支持 OpenAI 格式的 tools 参数
+  - 自动解析工具调用并返回 tool_calls
+  - 可对接 MCP 服务器使用
+
+### v1.0.0
+- 初始版本
+- 支持文本对话、图片识别、流式响应
+- Web 后台配置界面
 
 ## 🚀 快速开始
 
@@ -163,11 +177,7 @@ print(f"助手: {response.choices[0].message.content}")
 # 输出: 你刚才说你叫小明
 ```
 
-## 🖼️ 图片识别
 
-项目包含示例图片 `image.png`，可用于测试图片识别功能。
-
-![示例图片](image.png)
 
 ### 本地图片（Base64）
 
@@ -226,6 +236,57 @@ for chunk in stream:
     if chunk.choices[0].delta.content:
         print(chunk.choices[0].delta.content, end="", flush=True)
 ```
+
+## 🔧 Tools / Function Calling
+
+支持 OpenAI 格式的工具调用，可用于对接 MCP 服务器或自定义工具。
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="sk-gemini")
+
+# 定义工具
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_database",
+            "description": "在数据库中搜索用户信息",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "username": {"type": "string", "description": "用户名"}
+                },
+                "required": ["username"]
+            }
+        }
+    }
+]
+
+# 调用 API
+response = client.chat.completions.create(
+    model="gemini-3.0-flash",
+    messages=[{"role": "user", "content": "查询用户 zhangsan 的信息"}],
+    tools=tools
+)
+
+# 检查工具调用
+if response.choices[0].message.tool_calls:
+    for tc in response.choices[0].message.tool_calls:
+        print(f"调用工具: {tc.function.name}")
+        print(f"参数: {tc.function.arguments}")
+else:
+    print(response.choices[0].message.content)
+```
+
+### 工具调用流程
+
+1. 定义 tools 数组，描述可用工具
+2. 发送请求时传入 tools 参数
+3. 如果 AI 决定调用工具，返回 `tool_calls`
+4. 执行工具获取结果
+5. 将结果发回 AI 继续对话
 
 
 
@@ -310,3 +371,6 @@ PORT = 8000
 MIT
 ### 视频参考
 https://www.bilibili.com/video/BV1ZWB4BNE9n/
+## 🖼️ cookie获取示例
+
+![示例图片](image.png)
