@@ -315,6 +315,7 @@ def parse_tool_calls(content: str) -> tuple:
             call_data = json.loads(match)
             if call_data.get("name"):
                 tool_calls.append({
+                    "index": i,
                     "id": f"call_{uuid.uuid4().hex[:8]}",
                     "type": "function",
                     "function": {
