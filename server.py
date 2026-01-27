@@ -1004,11 +1004,21 @@ async def admin_get_config(request: Request):
 
 # ============ API 路由 ============
 
+class ToolCallFunction(BaseModel):
+    name: str
+    arguments: str
+
+class ToolCall(BaseModel):
+    id: str
+    type: str = "function"
+    function: ToolCallFunction
+
 class ChatMessage(BaseModel):
     role: str
-    content: Union[str, List[Dict[str, Any]]]
+    content: Optional[Union[str, List[Dict[str, Any]]]] = None  # Opcional para mensajes assistant con tool_calls
     name: Optional[str] = None
     tool_call_id: Optional[str] = None  # Necesario para tool results de opencode
+    tool_calls: Optional[List[ToolCall]] = None  # Para mensajes assistant que invocan tools
     
     class Config:
         extra = "ignore"
