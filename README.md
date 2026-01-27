@@ -49,13 +49,13 @@
 ### 1. 安装依赖
 
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
 ### 2. 启动服务
 
 ```bash
-python server.py
+uv run server.py
 ```
 
 启动后会显示：
