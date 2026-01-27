@@ -999,7 +999,11 @@ class GeminiClient:
         images = []
         
         if messages:
-            # OpenAI 格式 - 合并所有消息
+            # OpenAI 格式消息处理
+            # 如果已有会话上下文（conversation_id不为空），说明Gemini已经有历史记录
+            # 此时只需要处理用户消息，不需要重复发送assistant消息
+            has_context = bool(self.conversation_id)
+            
             for msg in messages:
                 role = msg.get("role", "user")
                 content = msg.get("content", "")
@@ -1011,11 +1015,12 @@ class GeminiClient:
                     if imgs:
                         images.extend(imgs)
                 elif role == "assistant":
-                    # 助手消息也加入上下文
-                    if isinstance(content, str) and content:
-                        text_parts.append(f"[助手回复]: {content}")
+                    # 只有在没有Gemini上下文时才需要包含assistant消息
+                    # 否则Gemini已经知道这些回复
+                    if not has_context and isinstance(content, str) and content:
+                        text_parts.append(f"[Previous response]: {content}")
                 elif role == "system":
-                    # system 消息作为前置指令
+                    # system 消息作为前置指令（总是需要）
                     if isinstance(content, str) and content:
                         text_parts.insert(0, content)
                 
