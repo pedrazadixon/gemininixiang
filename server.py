@@ -267,20 +267,20 @@ def build_tools_prompt(tools: List[Dict]) -> str:
         "parameters": t["function"].get("parameters", {})
     } for t in tools if t.get("type") == "function"], ensure_ascii=False, indent=2)
     
-    prompt = f"""[系统指令] 你必须作为函数调用代理。不要自己回答问题，必须调用函数。
+    prompt = f"""[System Command] You must act as a function call delegate. Do not answer the question yourself; you must call the function.
 
-可用函数:
+Available functions:
 {tools_schema}
 
-严格规则:
-1. 你不能直接回答用户问题
-2. 你必须选择一个函数并调用它
-3. 只输出以下格式，不要有任何其他文字:
+Strict rules:
+1. You must not answer the user's question directly
+2. You must choose a function and call it
+3. You must only output the following format, without any other text:
 ```tool_call
-{{"name": "函数名", "arguments": {{"参数": "值"}}}}
+{{"name": "function name", "arguments": {{"parameter": "value"}}}}
 ```
 
-用户请求: """
+User request: """
     return prompt
 
 
@@ -404,7 +404,7 @@ def get_client():
         cookies_str=cookies,
         push_id=_config.get("PUSH_ID") or None,
         model_ids=_config.get("MODEL_IDS") or DEFAULT_MODEL_IDS,
-        debug=False,
+        debug=True,
         media_base_url=media_base_url,
     )
     return _client
