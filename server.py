@@ -22,7 +22,7 @@ import hashlib
 import secrets
 
 # ============ Configuration ============
-API_KEY = "sk-geminixxxxx"
+API_KEY = "sk-gemini"
 HOST = "0.0.0.0"
 PORT = 8000
 CONFIG_FILE = "config_data.json"
@@ -1440,7 +1440,7 @@ if __name__ == "__main__":
 ╠══════════════════════════════════════════════════════════╣
 ║  Admin: http://localhost:{PORT}/admin                      ║
 ║  API URL: http://localhost:{PORT}/v1                       ║
-║  API Key:  {API_KEY}                                ║
+║  API Key:  {API_KEY}                                     ║
 ╚══════════════════════════════════════════════════════════╝
 """)
     uvicorn.run(app, host=HOST, port=PORT)
