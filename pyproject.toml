@@ -1,7 +1,7 @@
 [project]
 name = "gemininixiang"
 version = "0.1.0"
-description = "Add your description here"
+description = "A bridge to use Gemini Web as an OpenAI-compatible API"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
