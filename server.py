@@ -87,7 +87,7 @@ def cleanup_old_media(max_age_hours: int = 1):
     except Exception:
         pass
 
-# 存储有效的 session token
+# Store valid session tokens
 _admin_sessions = set()
 
 def generate_session_token():
@@ -1109,7 +1109,7 @@ def log_api_call(request_data: dict, response_data: dict, error: str = None):
         "error": error
     }
     try:
-        with open("api_logs.json", "a", encoding="utf-8") as f:
+        with open("logs_api.log", "a", encoding="utf-8") as f:
             f.write(json.dumps(log_entry, ensure_ascii=False, indent=2) + "\n---\n")
     except Exception as e:
         print(f"[LOG ERROR] 写入日志失败: {e}")
@@ -1237,7 +1237,7 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
     global _last_request_time
 
     # debug raw request and all headers into a file log 
-    with open("raw_request.log", "a") as log_file:
+    with open("logs_raw_requests.log", "a", encoding="utf-8") as log_file:
         log_file.write(json.dumps(request.model_dump(), ensure_ascii=False, indent=2))
         log_file.write(f"\n{json.dumps(dict(request.__dict__.get('__headers__', {})), ensure_ascii=False, indent=2)}")
         log_file.write("\n---\n")

@@ -1,5 +1,5 @@
-debug_image_response.txt
 __pycache__/
-api_logs.json
 config_data.json
-raw_request.log
+logs_raw_requests.log
+logs_api.log
+logs_debug_image_response.txt

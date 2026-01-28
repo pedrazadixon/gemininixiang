@@ -1066,7 +1066,7 @@ class GeminiClient:
             "error": error
         }
         try:
-            with open("api_logs.json", "a", encoding="utf-8") as f:
+            with open("logs_api.log", "a", encoding="utf-8") as f:
                 f.write(json.dumps(log_entry, ensure_ascii=False, indent=2) + "\n---\n")
         except Exception as e:
             print(f"[LOG ERROR] Failed to write Gemini log: {e}")
@@ -1155,9 +1155,9 @@ class GeminiClient:
                     print(f"[DEBUG] Response status: {resp.status_code}")
                     print(f"[DEBUG] Response content first 500 characters: {resp.text[:500]}")
                     # Always save full response for debugging
-                    with open("debug_image_response.txt", "w", encoding="utf-8") as f:
+                    with open("logs_debug_image_response.txt", "w", encoding="utf-8") as f:
                         f.write(resp.text)
-                    print(f"[DEBUG] Full response saved to debug_image_response.txt")
+                    print(f"[DEBUG] Full response saved to logs_debug_image_response.txt")
                 
                 # Log full Gemini response
                 self._log_gemini_call(gemini_request_log, resp.text)

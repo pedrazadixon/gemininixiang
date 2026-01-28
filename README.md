@@ -382,7 +382,7 @@ Set `debug=True` in `get_client()` to view detailed request logs.
 
 ### API Logs
 
-All API calls are logged to `api_logs.json` file.
+All API calls are logged to `logs_api.log` file.
 
 ## 📄 License
 
