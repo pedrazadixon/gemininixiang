@@ -2,3 +2,4 @@ debug_image_response.txt
 __pycache__/
 api_logs.json
 config_data.json
+raw_request.log

@@ -1209,6 +1209,9 @@ def extract_last_user_message(messages: list) -> list:
 
 
 def should_reset_session(client) -> bool:
+
+    return True
+
     """
     Determine if we should reset the Gemini session.
     Only reset on timeout or if there's no active session.
@@ -1232,6 +1235,20 @@ def should_reset_session(client) -> bool:
 @app.post("/v1/chat/completions")
 async def chat_completions(request: ChatCompletionRequest, authorization: str = Header(None)):
     global _last_request_time
+
+    # debug raw request and all headers into a file log 
+    with open("raw_request.log", "a") as log_file:
+        log_file.write(json.dumps(request.model_dump(), ensure_ascii=False, indent=2))
+        log_file.write(f"\n{json.dumps(dict(request.__dict__.get('__headers__', {})), ensure_ascii=False, indent=2)}")
+        log_file.write("\n---\n")
+    
+    # Log tool responses specifically for debugging
+    for msg in request.messages:
+        if hasattr(msg, 'role') and msg.role == 'tool':
+            print(f"[TOOL_RESPONSE] tool_call_id: {msg.tool_call_id}")
+            print(f"[TOOL_RESPONSE] content length: {len(msg.content) if msg.content else 0}")
+            print(f"[TOOL_RESPONSE] content: {msg.content[:500] if msg.content else 'None'}...")
+
     verify_api_key(authorization)
     
     # Log request parameters (truncate image content)

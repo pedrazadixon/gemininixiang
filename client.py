@@ -1,7 +1,7 @@
 """
 Gemini Web Reverse Engineering Client
-支持图文请求、上下文对话，OpenAI 格式输入输出
-手动配置 token，无需代码登录
+Supports text and image requests, contextual dialogue, and OpenAI format input/output.
+Manual token configuration, no code login required
 """
 
 import re
@@ -18,18 +18,18 @@ import time
 
 
 class CookieExpiredError(Exception):
-    """Cookie 过期或无效异常"""
+    """Cookie expired or invalid exception"""
     pass
 
 
 class ImageUploadError(Exception):
-    """图片上传失败异常"""
+    """Image upload failed exception"""
     pass
 
 
 @dataclass
 class Message:
-    """OpenAI 格式消息"""
+    """OpenAI format message"""
     role: str
     content: Union[str, List[Dict[str, Any]]]
 
@@ -50,7 +50,7 @@ class Usage:
 
 @dataclass
 class ChatCompletionResponse:
-    """OpenAI 格式响应"""
+    """OpenAI format response"""
     id: str
     object: str = "chat.completion"
     created: int = 0
@@ -82,15 +82,15 @@ class ChatCompletionResponse:
 
 class GeminiClient:
     """
-    Gemini 网页版逆向客户端
+    Gemini Web Reverse Engineering Client
     
-    使用方法:
-    1. 打开 https://gemini.google.com 并登录
-    2. F12 打开开发者工具 -> Application -> Cookies
-    3. 复制以下 cookie 值:
+    Usage:
+    1. Open https://gemini.google.com and log in
+    2. Press F12 to open Developer Tools -> Application -> Cookies
+    3. Copy the following cookie values:
        - __Secure-1PSID
-       - __Secure-1PSIDTS (可选)
-    4. Network 标签 -> 找任意请求 -> 复制 SNlM0e 值 (在页面源码中搜索)
+       - __Secure-1PSIDTS (optional)
+    4. Network tab -> Find any request -> Copy SNlM0e value (search in page source)
     """
     
     BASE_URL = "https://gemini.google.com"
@@ -109,19 +109,19 @@ class GeminiClient:
         media_base_url: str = None,
     ):
         """
-        初始化客户端 - 手动填写 token
+        Initialize client - manual token configuration
         
         Args:
-            secure_1psid: __Secure-1PSID cookie (必填)
-            secure_1psidts: __Secure-1PSIDTS cookie (推荐)
-            secure_1psidcc: __Secure-1PSIDCC cookie (推荐)
-            snlm0e: SNlM0e token (必填，从页面源码获取)
-            bl: BL 版本号 (可选，自动获取)
-            cookies_str: 完整 cookie 字符串 (可选，替代单独设置)
-            push_id: Push ID for image upload (必填用于图片上传)
-            model_ids: 模型 ID 映射 {"flash": "xxx", "pro": "xxx", "thinking": "xxx"}
-            debug: 是否打印调试信息
-            media_base_url: 媒体文件的基础 URL (如 http://localhost:8000)，用于构建完整的媒体访问 URL
+            secure_1psid: __Secure-1PSID cookie (required)
+            secure_1psidts: __Secure-1PSIDTS cookie (recommended)
+            secure_1psidcc: __Secure-1PSIDCC cookie (recommended)
+            snlm0e: SNlM0e token (required, obtained from page source)
+            bl: BL version number (optional, auto-fetch)
+            cookies_str: Full cookie string (optional, alternative to individual settings)
+            push_id: Push ID for image upload (required for image upload)
+            model_ids: Model ID mapping {"flash": "xxx", "pro": "xxx", "thinking": "xxx"}
+            debug: Whether to print debug information
+            media_base_url: Base URL for media files (e.g., http://localhost:8000), used to construct full media access URLs
         """
         self.secure_1psid = secure_1psid
         self.secure_1psidts = secure_1psidts
@@ -132,7 +132,7 @@ class GeminiClient:
         self.debug = debug
         self.media_base_url = media_base_url or ""
         
-        # 模型 ID 映射 (用于请求头选择模型)
+        # Model ID mapping (used for selecting model in request headers)
         self.model_ids = model_ids or {
             "flash": "56fdd199312815e2",
             "pro": "e6fa609c3fa255c0",
@@ -151,7 +151,7 @@ class GeminiClient:
             },
         )
         
-        # 设置 cookies
+        # Set cookies
         if cookies_str:
             self._set_cookies_from_string(cookies_str)
         else:
@@ -161,32 +161,32 @@ class GeminiClient:
             if secure_1psidcc:
                 self.session.cookies.set("__Secure-1PSIDCC", secure_1psidcc, domain=".google.com")
         
-        # 会话上下文
+        # Session context
         self.conversation_id: str = ""
         self.response_id: str = ""
         self.choice_id: str = ""
         self.request_count: int = 0
         
-        # 消息历史
+        # Message history
         self.messages: List[Message] = []
         
-        # 验证必填参数
+        # Validate required parameters
         if not self.snlm0e:
             raise ValueError(
-                "SNlM0e 是必填参数！\n"
-                "获取方法:\n"
-                "1. 打开 https://gemini.google.com 并登录\n"
-                "2. F12 -> 查看页面源代码 (Ctrl+U)\n"
-                "3. 搜索 'SNlM0e' 找到类似: \"SNlM0e\":\"xxxxxx\"\n"
-                "4. 复制引号内的值"
+                "SNlM0e is a required parameter!\n"
+                "How to obtain:\n"
+                "1. Open https://gemini.google.com and log in\n"
+                "2. F12 -> View page source (Ctrl+U)\n"
+                "3. Search for 'SNlM0e' to find something like: \"SNlM0e\":\"xxxxxx\"\n"
+                "4. Copy the value inside the quotes"
             )
         
-        # 自动获取 bl
+        # Auto-fetch BL
         if not self.bl:
             self._fetch_bl()
     
     def _set_cookies_from_string(self, cookies_str: str):
-        """从完整 cookie 字符串解析"""
+        """Parse from full cookie string"""
         for item in cookies_str.split(";"):
             item = item.strip()
             if "=" in item:
@@ -194,26 +194,26 @@ class GeminiClient:
                 self.session.cookies.set(key.strip(), value.strip(), domain=".google.com")
     
     def _fetch_bl(self):
-        """获取 BL 版本号"""
+        """Fetch BL version number"""
         try:
             resp = self.session.get(self.BASE_URL)
             match = re.search(r'"cfb2h":"([^"]+)"', resp.text)
             if match:
                 self.bl = match.group(1)
             else:
-                # 使用默认值
+                # Use default value
                 self.bl = "boq_assistant-bard-web-server_20241209.00_p0"
             if self.debug:
                 print(f"[DEBUG] BL: {self.bl}")
         except Exception as e:
             self.bl = "boq_assistant-bard-web-server_20241209.00_p0"
             if self.debug:
-                print(f"[DEBUG] 获取 BL 失败，使用默认值: {e}")
+                print(f"[DEBUG] Failed to fetch BL, using default: {e}")
 
 
     
     def _parse_content(self, content: Union[str, List[Dict]]) -> tuple:
-        """解析 OpenAI 格式 content，返回 (text, images)"""
+        """Parse OpenAI format content, return (text, images)"""
         if isinstance(content, str):
             return content, []
         
@@ -224,7 +224,7 @@ class GeminiClient:
             if item.get("type") == "text":
                 text_parts.append(item.get("text", ""))
             elif item.get("type") == "image_url":
-                # 支持两种格式: {"url": "..."} 或直接字符串
+                # Support two formats: {"url": "..."} or direct string
                 image_url_data = item.get("image_url", {})
                 if isinstance(image_url_data, str):
                     url = image_url_data
@@ -235,12 +235,12 @@ class GeminiClient:
                     continue
                     
                 if url.startswith("data:"):
-                    # base64 格式: data:image/png;base64,xxxxx
+                    # base64 format: data:image/png;base64,xxxxx
                     match = re.match(r'data:([^;]+);base64,(.+)', url)
                     if match:
                         images.append({"mime_type": match.group(1), "data": match.group(2)})
                 elif url.startswith("http://") or url.startswith("https://"):
-                    # URL 格式，下载图片
+                    # URL format, download image
                     try:
                         resp = httpx.get(url, timeout=30)
                         if resp.status_code == 200:
@@ -248,12 +248,12 @@ class GeminiClient:
                             images.append({"mime_type": mime, "data": base64.b64encode(resp.content).decode()})
                     except Exception as e:
                         if self.debug:
-                            print(f"[DEBUG] 下载图片失败: {e}")
+                            print(f"[DEBUG] Failed to download image: {e}")
                 else:
-                    # 可能是纯 base64 字符串 (没有 data: 前缀)
+                    # Might be a pure base64 string (without data: prefix)
                     try:
-                        # 尝试解码验证是否是有效 base64
-                        base64.b64decode(url[:100])  # 只验证前100字符
+                        # Try decoding to verify if it's valid base64
+                        base64.b64decode(url[:100])  # Only verify the first 100 characters
                         images.append({"mime_type": "image/png", "data": url})
                     except:
                         pass
@@ -262,26 +262,26 @@ class GeminiClient:
     
     def _upload_image(self, image_data: bytes, mime_type: str = "image/jpeg") -> str:
         """
-        上传图片到 Gemini 服务器
+        Upload image to Gemini server
         
         Args:
-            image_data: 图片二进制数据
-            mime_type: 图片 MIME 类型
+            image_data: Image binary data
+            mime_type: Image MIME type
             
         Returns:
-            str: 上传后的图片路径（带 token）
+            str: Uploaded image path (with token)
         """
         if not self.push_id:
             raise CookieExpiredError(
-                "图片上传需要 push_id\n"
-                "获取方法: 运行 python get_push_id.py 或从浏览器 Network 中获取"
+                "Image upload requires push_id\n"
+                "How to get it: run python get_push_id.py or get it from browser Network"
             )
         
         try:
             upload_url = "https://push.clients6.google.com/upload/"
             filename = f"image_{random.randint(100000, 999999)}.png"
             
-            # 浏览器必需的头
+            # Headers required by browser
             browser_headers = {
                 "accept": "*/*",
                 "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
@@ -297,7 +297,7 @@ class GeminiClient:
                 "x-client-data": "CIa2yQEIpbbJAQipncoBCNvaygEIk6HLAQiFoM0BCJaMzwEIkZHPAQiSpM8BGOyFzwEYsobPAQ==",
             }
             
-            # 第一步：获取 upload_id
+            # Step 1: Get upload_id
             init_headers = {
                 **browser_headers,
                 "content-type": "application/x-www-form-urlencoded;charset=utf-8",
@@ -311,13 +311,13 @@ class GeminiClient:
             init_resp = self.session.post(upload_url, data={"File name": filename}, headers=init_headers)
             
             if self.debug:
-                print(f"[DEBUG] 初始化上传状态: {init_resp.status_code}")
+                print(f"[DEBUG] Initialize upload status: {init_resp.status_code}")
             
-            # 检查初始化响应状态
+            # Check initialization response status
             if init_resp.status_code == 401 or init_resp.status_code == 403:
                 raise CookieExpiredError(
-                    f"Cookie 已过期或无效 (HTTP {init_resp.status_code})\n"
-                    "请重新获取以下信息:\n"
+                    f"Cookie expired or invalid (HTTP {init_resp.status_code})\n"
+                    "Please re-acquire the following information:\n"
                     "1. __Secure-1PSID\n"
                     "2. __Secure-1PSIDTS\n"
                     "3. SNlM0e\n"
@@ -327,14 +327,14 @@ class GeminiClient:
             upload_id = init_resp.headers.get("x-guploader-uploadid")
             if not upload_id:
                 raise CookieExpiredError(
-                    f"未获取到 upload_id (状态码: {init_resp.status_code})\n"
-                    "可能原因: Cookie 已过期，请重新获取所有 token"
+                    f"Failed to get upload_id (status code: {init_resp.status_code})\n"
+                    "Possible reason: Cookie expired, please re-acquire all tokens"
                 )
             
             if self.debug:
                 print(f"[DEBUG] Upload ID: {upload_id[:50]}...")
             
-            # 第二步：上传图片数据
+            # Step 2: Upload image data
             final_upload_url = f"{upload_url}?upload_id={upload_id}&upload_protocol=resumable"
             
             upload_headers = {
@@ -354,53 +354,53 @@ class GeminiClient:
             )
             
             if self.debug:
-                print(f"[DEBUG] 上传数据状态: {upload_resp.status_code}")
-                print(f"[DEBUG] 响应头: {dict(upload_resp.headers)}")
-                print(f"[DEBUG] 响应内容完整: {upload_resp.text}")
+                print(f"[DEBUG] Upload data status: {upload_resp.status_code}")
+                print(f"[DEBUG] Response headers: {dict(upload_resp.headers)}")
+                print(f"[DEBUG] Full response content: {upload_resp.text}")
             
-            # 检查上传响应状态
+            # Check upload response status
             if upload_resp.status_code == 401 or upload_resp.status_code == 403:
                 raise CookieExpiredError(
-                    f"上传图片认证失败 (HTTP {upload_resp.status_code})\n"
-                    "Cookie 已过期，请重新获取"
+                    f"Image upload authentication failed (HTTP {upload_resp.status_code})\n"
+                    "Cookie expired, please re-acquire"
                 )
             
             if upload_resp.status_code != 200:
-                raise Exception(f"上传图片数据失败: {upload_resp.status_code}, 响应: {upload_resp.text[:200] if upload_resp.text else '(empty)'}")
+                raise Exception(f"Image data upload failed: {upload_resp.status_code}, Response: {upload_resp.text[:200] if upload_resp.text else '(empty)'}")
             
-            # 从响应中提取图片路径
+            # Extract image path from response
             response_text = upload_resp.text
             image_path = None
             
-            # 尝试解析 JSON
+            # Try to parse JSON
             try:
                 response_json = json.loads(response_text)
                 image_path = self._extract_image_path(response_json)
             except json.JSONDecodeError:
-                # 如果不是 JSON，尝试从文本中提取路径
+                # If not JSON, try to extract path from text
                 match = re.search(r'/contrib_service/[^\s"\']+', response_text)
                 if match:
                     image_path = match.group(0)
             
-            # 验证图片路径完整性
+            # Verify image path integrity
             if not image_path:
                 raise CookieExpiredError(
-                    f"无法从响应中提取图片路径\n"
-                    f"响应内容: {response_text[:300]}\n"
-                    "可能原因: Cookie 已过期，请重新获取所有 token"
+                    f"Failed to extract image path from response\n"
+                    f"Response content: {response_text[:300]}\n"
+                    "Possible reason: Cookie expired, please re-acquire all tokens"
                 )
             
-            # 检查路径是否有效（长度足够即可，新版可能不带查询参数）
+            # Check if path is valid (length is sufficient, new version may not have query parameters)
             if "/contrib_service/" in image_path:
-                # 路径长度至少要有一定长度才是有效的
+                # Path length must be sufficiently long to be valid
                 if len(image_path) < 40:
                     raise CookieExpiredError(
-                        f"图片路径不完整\n"
-                        f"返回路径: {image_path}\n"
-                        "原因: Cookie 已过期或权限不足\n"
-                        "解决方法:\n"
-                        "1. 重新登录 https://gemini.google.com\n"
-                        "2. 更新 config.py 中的所有 token:\n"
+                        f"Image path is incomplete\n"
+                        f"Returned path: {image_path}\n"
+                        "Reason: Cookie expired or insufficient permissions\n"
+                        "Solution:\n"
+                        "1. Re-login at https://gemini.google.com\n"
+                        "2. Update all tokens in config.py:\n"
                         "   - SECURE_1PSID\n"
                         "   - SECURE_1PSIDTS\n"
                         "   - SNLM0E\n"
@@ -408,7 +408,7 @@ class GeminiClient:
                     )
             
             if self.debug:
-                print(f"[DEBUG] 图片路径: {image_path}")
+                print(f"[DEBUG] Image path: {image_path}")
             
             return image_path
             
@@ -416,11 +416,11 @@ class GeminiClient:
             raise
         except Exception as e:
             if self.debug:
-                print(f"[DEBUG] 上传失败: {e}")
-            raise Exception(f"图片上传失败: {e}")
+                print(f"[DEBUG] Upload failed: {e}")
+            raise Exception(f"Image upload failed: {e}")
     
     def _extract_image_path(self, data: Any) -> str:
-        """从响应数据中递归提取图片路径"""
+        """Recursively extract image path from response data"""
         if isinstance(data, str):
             if data.startswith("/contrib_service/"):
                 return data
@@ -437,46 +437,46 @@ class GeminiClient:
         return None
     
     def _build_request_data(self, text: str, images: List[Dict] = None, image_paths: List[str] = None, model: str = None) -> str:
-        """构建请求数据 - 基于真实请求格式"""
-        # 会话上下文 (空字符串表示新对话)
+        """Build request data - based on real request format"""
+        # Session context (empty string means new conversation)
         conv_id = self.conversation_id or ""
         resp_id = self.response_id or ""
         choice_id = self.choice_id or ""
         
-        # 处理图片数据 - 格式: [[[path, 1, null, mime_type], filename]]
+        # Process image data - format: [[[path, 1, null, mime_type], filename]]
         image_data = None
         if image_paths and len(image_paths) > 0:
             path = image_paths[0]
             mime_type = images[0]["mime_type"] if images else "image/png"
             filename = f"image_{random.randint(100000, 999999)}.png"
-            # 构建图片数组结构
+            # Build image array structure
             image_data = [[[path, 1, None, mime_type], filename]]
         
-        # 生成唯一会话 ID
+        # Generate unique session ID
         session_id = str(uuid.uuid4()).upper()
         timestamp = int(time.time() * 1000)
         
-        # 模型映射: 将模型名称转换为 Gemini 内部模型标识
-        # [[0]] = gemini-3.0-pro (Pro 版)
-        # [[1]] = gemini-3.0-flash (快速版，默认)
-        # [[3]] = gemini-3.0-flash-thinking (思考版)
-        model_code = [[1]]  # 默认快速版
+        # Model mapping: convert model name to Gemini internal model identifier
+        # [[0]] = gemini-3.0-pro (Pro version)
+        # [[1]] = gemini-3.0-flash (Flash version, default)
+        # [[3]] = gemini-3.0-flash-thinking (Thinking version)
+        model_code = [[1]]  # Default flash version
         if model:
             model_lower = model.lower()
             if "pro" in model_lower:
-                model_code = [[0]]  # Pro 版
+                model_code = [[0]]  # Pro version
             elif "thinking" in model_lower or "think" in model_lower:
-                model_code = [[3]]  # 思考版
-            # flash 或其他情况保持默认 [[1]]
+                model_code = [[3]]  # Thinking version
+            # flash or other cases keep default [[1]]
         
-        # 构建内部 JSON 数组 (基于真实请求格式)
-        # 第一个元素: [text, 0, null, image_data, null, null, 0]
+        # Build internal JSON array (based on real request format)
+        # First element: [text, 0, null, image_data, null, null, 0]
         inner_data = [
             [text, 0, None, image_data, None, None, 0],
             ["zh-CN"],
             [conv_id, resp_id, choice_id, None, None, None, None, None, None, ""],
             self.snlm0e,
-            None,  # 之前是 "test123"，改为 null
+            None,  # Previously "test123", changed to null
             None,
             [1],
             1,
@@ -489,7 +489,7 @@ class GeminiClient:
             None,
             None,
             None,
-            model_code,  # 模型选择字段
+            model_code,  # Model selection field
             0,
             None,
             None,
@@ -541,10 +541,10 @@ class GeminiClient:
             [timestamp // 1000, (timestamp % 1000) * 1000000]
         ]
         
-        # 序列化为 JSON 字符串
+        # Serialize to JSON string
         inner_json = json.dumps(inner_data, ensure_ascii=False, separators=(',', ':'))
         
-        # 外层包装
+        # Outer wrapping
         outer_data = [None, inner_json]
         f_req_value = json.dumps(outer_data, ensure_ascii=False, separators=(',', ':'))
         
@@ -552,52 +552,52 @@ class GeminiClient:
 
     
     def _parse_response(self, response_text: str) -> str:
-        """解析响应文本 - 修复版"""
+        """Parse response text - fixed version"""
         try:
-            # 跳过前缀并按行解析
+            # Skip prefix and parse line by line
             lines = response_text.split("\n")
             final_text = ""
-            generated_images_set = set()  # 使用 set 全局去重
-            last_inner_json = None  # 保存最后一个有效的 inner_json 用于调试
+            generated_images_set = set()  # Use set for global deduplication
+            last_inner_json = None  # Store the last valid inner_json for debugging
             
             for line in lines:
                 line = line.strip()
                 if not line or line.startswith(")]}'"):
                     continue
                 
-                # 跳过数字行（长度标记）
+                # Skip numeric lines (length markers)
                 if line.isdigit():
                     continue
                 
                 try:
                     data = json.loads(line)
-                    # data 是一个嵌套数组，data[0] 才是真正的数据
+                    # data is a nested array, data[0] is the actual data
                     if isinstance(data, list) and len(data) > 0 and isinstance(data[0], list):
                         actual_data = data[0]
-                        # 检查是否是 wrb.fr 响应
+                        # Check if it's a wrb.fr response
                         if len(actual_data) >= 3 and actual_data[0] == "wrb.fr" and actual_data[2]:
                             inner_json = json.loads(actual_data[2])
                             last_inner_json = inner_json
                             
-                            # 尝试提取生成的图片 URL，合并到全局 set 中去重
+                            # Try to extract generated image URLs and merge into global set for deduplication
                             imgs = self._extract_generated_images(inner_json)
                             if imgs:
                                 for img in imgs:
                                     generated_images_set.add(img)
                                 if self.debug:
-                                    print(f"[DEBUG] 从响应中提取到 {len(imgs)} 个图片 URL，当前总数: {len(generated_images_set)}")
+                                    print(f"[DEBUG] Extracted {len(imgs)} image URLs from response, current total: {len(generated_images_set)}")
                             
-                            # 提取文本内容
+                            # Extract text content
                             if inner_json and len(inner_json) > 4 and inner_json[4]:
                                 candidates = inner_json[4]
                                 if candidates and len(candidates) > 0:
                                     candidate = candidates[0]
                                     if candidate and len(candidate) > 1 and candidate[1]:
-                                        # candidate[1] 是一个数组，第一个元素是文本
+                                        # candidate[1] is an array, the first element is text
                                         text = candidate[1][0] if isinstance(candidate[1], list) else candidate[1]
                                         if isinstance(text, str) and len(text) > len(final_text):
                                             final_text = text
-                                            # 更新会话上下文
+                                            # Update conversation context
                                             if len(inner_json) > 1 and inner_json[1]:
                                                 if isinstance(inner_json[1], list):
                                                     if len(inner_json[1]) > 0:
@@ -608,121 +608,121 @@ class GeminiClient:
                                                 self.choice_id = candidate[0] or self.choice_id
                 except Exception as e:
                     if self.debug:
-                        print(f"[DEBUG] 解析行时出错: {e}")
+                        print(f"[DEBUG] Error parsing line: {e}")
                     continue
             
-            # 转换为列表
+            # Convert to list
             generated_images = list(generated_images_set)
             
             if self.debug:
-                print(f"[DEBUG] 解析完成: final_text长度={len(final_text)}, 图片数量={len(generated_images)}")
+                print(f"[DEBUG] Parsing completed: final_text length={len(final_text)}, number of images={len(generated_images)}")
             
-            # 处理生成的图片/视频 - 下载并缓存到本地
+            # Process generated images/videos - download and cache locally
             if generated_images:
                 if self.debug:
-                    print(f"[DEBUG] 提取到 {len(generated_images)} 个媒体 URL，开始下载...")
+                    print(f"[DEBUG] Extracted {len(generated_images)} media URLs, starting download...")
                 
-                # 下载图片并获取本地代理 URL
+                # Download images and get local proxy URLs
                 local_media_urls = []
                 for i, url in enumerate(generated_images):
                     if self.debug:
-                        print(f"[DEBUG] 下载媒体 {i+1}/{len(generated_images)}: {url[:80]}...")
+                        print(f"[DEBUG] Downloading media {i+1}/{len(generated_images)}: {url[:80]}...")
                     local_url = self._download_media_as_data_url(url)
                     if local_url:
                         local_media_urls.append(local_url)
                         if self.debug:
-                            print(f"[DEBUG] 媒体 {i+1} 下载成功: {local_url}")
+                            print(f"[DEBUG] Media {i+1} downloaded successfully: {local_url}")
                     else:
-                        # 下载失败，使用原始 URL
+                        # Download failed, use original URL
                         local_media_urls.append(url)
                         if self.debug:
-                            print(f"[DEBUG] 媒体 {i+1} 下载失败，使用原始 URL")
+                            print(f"[DEBUG] Media {i+1} download failed, using original URL")
                 
-                # 检测占位符（如果有文本的话）
+                # Check for placeholders (if there is text)
                 has_placeholder = False
                 if final_text:
                     has_placeholder = ('image_generation_content' in final_text or 
                                        'video_gen_chip' in final_text)
                 
-                # 构建包含本地代理 URL 的响应
+                # Construct response with local proxy URLs
                 media_parts = []
                 for i, url in enumerate(local_media_urls):
-                    media_parts.append(f"![生成的内容 {i+1}]({url})")
+                    media_parts.append(f"![Generated content {i+1}]({url})")
                 
                 media_text = "\n\n".join(media_parts)
                 
                 if has_placeholder:
-                    # 移除占位符 URL
+                    # Remove placeholder URLs
                     cleaned_text = re.sub(r'https?://googleusercontent\.com/(?:image_generation_content|video_gen_chip)/\d+', '', final_text)
                     cleaned_text = re.sub(r'http://googleusercontent\.com/(?:image_generation_content|video_gen_chip)/\d+', '', cleaned_text)
-                    cleaned_text = re.sub(r'!\[.*?\]\(\)', '', cleaned_text)  # 移除空的图片标记
+                    cleaned_text = re.sub(r'!\[.*?\]\(\)', '', cleaned_text)  # Remove empty image tags
                     cleaned_text = cleaned_text.strip()
                     if cleaned_text:
                         final_text = cleaned_text + "\n\n" + media_text
                     else:
                         final_text = media_text
                 elif final_text:
-                    # 有文本但没有占位符，追加图片
+                    # Text exists but no placeholders, append images
                     final_text = final_text + "\n\n" + media_text
                 else:
-                    # 没有文本，只有图片
+                    # No text, only images
                     final_text = media_text
                 
                 if self.debug:
-                    print(f"[DEBUG] 媒体处理完成，成功下载 {len([u for u in local_media_urls if u.startswith('/media/')])} 个")
+                    print(f"[DEBUG] Media processing completed, successfully downloaded {len([u for u in local_media_urls if u.startswith('/media/')])} items")
             
-            # 检测视频生成占位符，替换为提示文案
+            # Check for video generation placeholders and replace with notice
             is_video_generation = False
             if final_text and 'video_gen_chip' in final_text:
                 is_video_generation = True
             
-            # 清理文本中的占位符 URL 和用户上传图片的 URL
+            # Clean placeholder URLs and user-uploaded image URLs in the text
             if final_text:
-                # 清理占位符 URL
+                # Clean placeholder URLs
                 final_text = re.sub(r'https?://googleusercontent\.com/(?:image_generation_content|video_gen_chip)/\d+\s*', '', final_text)
                 final_text = re.sub(r'http://googleusercontent\.com/(?:image_generation_content|video_gen_chip)/\d+\s*', '', final_text)
-                # 清理用户上传图片的 URL（/gg/ 路径，非 /gg-dl/）
+                # Clean user-uploaded image URLs (/gg/ path, not /gg-dl/)
                 final_text = re.sub(r'!\[[^\]]*\]\(https://[^)]*googleusercontent\.com/gg/[^)]+\)', '', final_text)
                 final_text = re.sub(r'https://lh3\.googleusercontent\.com/gg/[^\s\)]+', '', final_text)
                 final_text = final_text.strip()
             
-            # 如果是视频生成，添加提示文案
+            # If it is video generation, add a notice
             if is_video_generation:
-                video_notice = "\n\n---\n📹 视频为异步生成，生成结果可在官网聊天窗口查看下载。\n\n⏱️ 使用限制：\n- 视频生成 (Veo 模型)：每天总共可以生成 3 次\n- 图片生成 (Nano Banana 模型)：每天总共可以生成 1000 次"
+                video_notice = "\n\n---\n📹 Video is generated asynchronously. The results can be viewed and downloaded in the official chat window.\n\n⏱️ Usage limits:\n- Video generation (Veo model): 3 times per day in total\n- Image generation (Nano Banana model): 1000 times per day in total"
                 if final_text:
                     final_text = final_text + video_notice
                 else:
                     final_text = video_notice.strip()
             
             if final_text:
-                # 优化图片 URL 为原始高清尺寸（仅对未下载的原始 URL）
+                # Optimize image URLs to original high-definition size (only for original URLs that have not been downloaded)
                 final_text = self._optimize_image_urls(final_text)
                 return final_text
             
-            # 如果没有文本也没有图片，尝试从 last_inner_json 中提取更多信息
+            # If there is no text and no images, try to extract more information from last_inner_json
             if self.debug and last_inner_json:
-                print(f"[DEBUG] 无法提取内容，inner_json 结构: {str(last_inner_json)[:500]}...")
+                print(f"[DEBUG] Unable to extract content, inner_json structure: {str(last_inner_json)[:500]}...")
                 
         except Exception as e:
             if self.debug:
-                print(f"[DEBUG] 解析错误: {e}")
+                print(f"[DEBUG] Parsing error: {e}")
         
-        return "无法解析响应"
+        return "Unable to parse response"
     
     def _extract_generated_media(self, data: Any, depth: int = 0) -> List[str]:
-        """从响应数据中递归提取生成的图片/视频 URL
+        """Recursively extract generated image/video URLs from response data
         
-        Gemini 会返回两个媒体（带水印和不带水印），我们只保留最后一个（不带水印）
-        只提取 AI 生成的媒体 (/gg-dl/ 路径)，不提取用户上传的图片 (/gg/ 路径)
+        Gemini returns two media items (one with watermark and one without), we only keep the last one (without watermark)
+        Only extract AI-generated media (/gg-dl/ path), do not extract user-uploaded images (/gg/ path)
         """
-        if depth > 30:  # 防止无限递归
+        if depth > 30:  # Prevent infinite recursion
             return []
         
         media_urls = []
         
         if isinstance(data, list):
-            # 检查是否是媒体对结构: [[null, 1, "file1.png/mp4", "url1", ...], null, null, [null, 1, "file2.png/mp4", "url2", ...]]
-            # 第一个是带水印的，第二个是不带水印的
+            # Check if it is a media pair structure: [[null, 1, "file1.png/mp4", "url1", ...], null, null, [null, 1, "file2.png/mp4", "url2", ...]]
+            # The first one has a watermark, the second one does not
             if (len(data) >= 1 and 
                 isinstance(data[0], list) and len(data[0]) >= 4 and
                 data[0][0] is None and 
@@ -730,8 +730,8 @@ class GeminiClient:
                 isinstance(data[0][2], str) and
                 isinstance(data[0][3], str) and 
                 data[0][3].startswith('https://') and
-                'gg-dl/' in data[0][3]):  # 只匹配 AI 生成的媒体
-                # 尝试找第二个媒体（不带水印）
+                'gg-dl/' in data[0][3]):  # Only match AI-generated media
+                # Try to find the second media (without watermark)
                 second_url = None
                 if len(data) >= 4 and isinstance(data[3], list) and len(data[3]) >= 4:
                     if (data[3][0] is None and 
@@ -739,33 +739,33 @@ class GeminiClient:
                         'gg-dl/' in data[3][3]):
                         second_url = data[3][3]
                 
-                # 优先使用第二个，否则用第一个
+                # Prefer the second one, otherwise use the first one
                 url = second_url if second_url else data[0][3]
                 if 'image_generation_content' not in url and 'video_gen_chip' not in url:
                     media_urls.append(url)
                     return media_urls
             
-            # 检查是否是单个媒体数据结构: [null, 1, "filename.png/mp4", "https://...gg-dl/..."]
+            # Check if it is a single media data structure: [null, 1, "filename.png/mp4", "https://...gg-dl/..."]
             if (len(data) >= 4 and 
                 data[0] is None and 
                 isinstance(data[1], int) and
                 isinstance(data[2], str) and 
                 isinstance(data[3], str) and 
                 data[3].startswith('https://') and
-                'gg-dl/' in data[3]):  # 只匹配 AI 生成的媒体
+                'gg-dl/' in data[3]):  # Only match AI-generated media
                 url = data[3]
                 if 'image_generation_content' not in url and 'video_gen_chip' not in url:
                     media_urls.append(url)
                     return media_urls
             
-            # 递归搜索，收集所有媒体 URL
+            # Recursively search and collect all media URLs
             all_found = []
             for item in data:
                 found = self._extract_generated_media(item, depth + 1)
                 if found:
                     all_found.extend(found)
             
-            # 如果找到多个，返回最后一个（通常是不带水印的）
+            # If multiple are found, return the last one (usually without watermark)
             if all_found:
                 seen = set()
                 unique = []
@@ -773,7 +773,7 @@ class GeminiClient:
                     if u not in seen:
                         seen.add(u)
                         unique.append(u)
-                # 返回最后一个（不带水印）
+                # Return the last one (without watermark)
                 return [unique[-1]] if unique else []
                 
         elif isinstance(data, dict):
@@ -784,36 +784,36 @@ class GeminiClient:
         
         return media_urls
     
-    # 保持向后兼容
+    # Maintain backward compatibility
     def _extract_generated_images(self, data: Any, depth: int = 0) -> List[str]:
-        """向后兼容的别名"""
+        """Alias for backward compatibility"""
         return self._extract_generated_media(data, depth)
     
     def _download_media_as_data_url(self, url: str) -> str:
-        """下载媒体文件并保存到本地缓存，返回本地代理 URL
+        """Download media file and save to local cache, return local proxy URL
         
         Args:
-            url: 媒体文件的 URL
+            url: Media file URL
             
         Returns:
-            str: 本地代理 URL 或 base64 data URL
-                 下载失败时返回空字符串
+            str: Local proxy URL or base64 data URL
+                 Returns an empty string if the download fails
         """
         try:
-            # 先优化 URL 获取高清原图（仅对图片）
+            # First optimize URL to get high-definition original image (images only)
             if ("googleusercontent" in url or "ggpht" in url) and not any(ext in url.lower() for ext in ['.mp4', '.webm', 'video']):
-                # 移除现有尺寸参数，添加原始尺寸参数 =s0
+                # Remove existing size parameters, add original size parameter =s0
                 url = re.sub(r'=w\d+(-h\d+)?(-[a-zA-Z]+)*$', '=s0', url)
                 url = re.sub(r'=s\d+(-[a-zA-Z]+)*$', '=s0', url)
                 url = re.sub(r'=h\d+(-[a-zA-Z]+)*$', '=s0', url)
-                # 如果 URL 没有尺寸参数，添加 =s0
+                # If URL has no size parameter, add =s0
                 if not url.endswith('=s0') and '=' not in url.split('/')[-1]:
                     url += '=s0'
             
             if self.debug:
-                print(f"[DEBUG] 正在下载媒体 (高清): {url[:100]}...")
+                print(f"[DEBUG] Downloading media (HD): {url[:100]}...")
             
-            # 使用当前会话下载（带认证 cookies）
+            # Use current session to download (with authenticated cookies)
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
                 "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
@@ -823,20 +823,20 @@ class GeminiClient:
             resp = self.session.get(url, timeout=60.0, headers=headers)
             
             if self.debug:
-                print(f"[DEBUG] 下载状态: {resp.status_code}, 大小: {len(resp.content)} bytes")
+                print(f"[DEBUG] Download status: {resp.status_code}, size: {len(resp.content)} bytes")
             
             if resp.status_code != 200:
                 if self.debug:
-                    print(f"[DEBUG] 下载媒体失败: HTTP {resp.status_code}")
+                    print(f"[DEBUG] Download media failed: HTTP {resp.status_code}")
                 return ""
             
-            # 检查内容是否为空或太小（可能是错误页面）
+            # Check if content is empty or too small (possibly an error page)
             if len(resp.content) < 100:
                 if self.debug:
-                    print(f"[DEBUG] 下载内容太小，可能是错误: {resp.content[:100]}")
+                    print(f"[DEBUG] Downloaded content too small, possibly an error: {resp.content[:100]}")
                 return ""
             
-            # 根据内容检测文件类型
+            # Detect file type based on content
             content = resp.content
             if content[:8] == b'\x89PNG\r\n\x1a\n':
                 ext = ".png"
@@ -857,11 +857,11 @@ class GeminiClient:
                 ext = ".png"
                 mime = "image/png"
             
-            # 生成唯一文件名
+            # Generate unique filename
             import os
             media_id = f"gen_{uuid.uuid4().hex[:16]}"
             
-            # 保存到缓存目录
+            # Save to cache directory
             cache_dir = os.path.join(os.path.dirname(__file__), "media_cache")
             os.makedirs(cache_dir, exist_ok=True)
             file_path = os.path.join(cache_dir, media_id + ext)
@@ -870,9 +870,9 @@ class GeminiClient:
                 f.write(content)
             
             if self.debug:
-                print(f"[DEBUG] 媒体已保存: {file_path}")
+                print(f"[DEBUG] Media saved: {file_path}")
             
-            # 返回完整的媒体访问 URL
+            # Return full media access URL
             media_path = f"/media/{media_id}"
             if self.media_base_url:
                 return f"{self.media_base_url}{media_path}"
@@ -880,33 +880,33 @@ class GeminiClient:
             
         except Exception as e:
             if self.debug:
-                print(f"[DEBUG] 下载媒体异常: {e}")
+                print(f"[DEBUG] Download media exception: {e}")
             return ""
     
     def _optimize_image_urls(self, text: str) -> str:
-        """优化文本中的 Google 图片 URL 为原始高清尺寸
+        """Optimize Google image URLs in text to original high-definition size
         
-        Google 图片 URL 参数说明:
-        - =w400 或 =h400: 指定宽度或高度
-        - =s400: 指定最大边长
-        - =s0 或 =w0-h0: 原始尺寸
+        Google image URL parameter explanation:
+        - =w400 or =h400: specify width or height
+        - =s400: specify maximum side length
+        - =s0 or =w0-h0: original size
         """
         import re
         
         def optimize_url(url: str) -> str:
-            # 匹配 googleusercontent 或 ggpht 图片 URL
+            # Match googleusercontent or ggpht image URLs
             if "googleusercontent" not in url and "ggpht" not in url:
                 return url
-            # 移除现有尺寸参数，添加原始尺寸参数
+            # Remove existing size parameters and add original size parameter
             url = re.sub(r'=w\d+(-h\d+)?(-[a-zA-Z]+)*$', '=s0', url)
             url = re.sub(r'=s\d+(-[a-zA-Z]+)*$', '=s0', url)
             url = re.sub(r'=h\d+(-[a-zA-Z]+)*$', '=s0', url)
-            # 如果 URL 没有尺寸参数，添加 =s0
+            # If URL has no size parameter, add =s0
             if not url.endswith('=s0') and '=' not in url.split('/')[-1]:
                 url += '=s0'
             return url
         
-        # 匹配 Markdown 图片语法和纯 URL
+        # Match Markdown image syntax and plain URLs
         # Markdown: ![alt](url)
         def replace_md_img(match):
             alt = match.group(1)
@@ -915,7 +915,7 @@ class GeminiClient:
         
         text = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', replace_md_img, text)
         
-        # 匹配独立的 Google 图片 URL
+        # Match standalone Google image URLs
         def replace_url(match):
             return optimize_url(match.group(0))
         
@@ -925,16 +925,16 @@ class GeminiClient:
 
     
     def _extract_text(self, parsed_data: list) -> str:
-        """从解析后的数据中提取文本"""
+        """Extract text from parsed data"""
         try:
-            # 更新会话上下文
+            # Update conversation context
             if parsed_data and len(parsed_data) > 1:
                 if parsed_data[1] and len(parsed_data[1]) > 0:
                     self.conversation_id = parsed_data[1][0] or self.conversation_id
                 if parsed_data[1] and len(parsed_data[1]) > 1:
                     self.response_id = parsed_data[1][1] or self.response_id
             
-            # 提取候选回复
+            # Extract candidate replies
             if parsed_data and len(parsed_data) > 4 and parsed_data[4]:
                 candidates = parsed_data[4]
                 if candidates and len(candidates) > 0:
@@ -945,7 +945,7 @@ class GeminiClient:
                         if content_parts and len(content_parts) > 0:
                             return content_parts[0] if isinstance(content_parts[0], str) else str(content_parts[0])
             
-            # 备用提取
+            # Fallback extraction
             if parsed_data and len(parsed_data) > 0:
                 def find_text(obj, depth=0):
                     if depth > 10:
@@ -966,7 +966,7 @@ class GeminiClient:
         except Exception as e:
             pass
         
-        return "无法提取回复内容"
+        return "Unable to extract reply content"
     
     def chat(
         self,
@@ -978,30 +978,30 @@ class GeminiClient:
         model: str = None
     ) -> ChatCompletionResponse:
         """
-        发送聊天请求 (OpenAI 兼容格式)
+        Send chat request (OpenAI compatible format)
         
         Args:
-            messages: OpenAI 格式消息列表
-            message: 简单文本消息 (与 messages 二选一)
-            image: 图片二进制数据
-            image_url: 图片 URL
-            reset_context: 是否重置上下文
-            model: 模型名称 (gemini-3.0-flash/gemini-3.0-flash-thinking/gemini-3.0-pro)
+            messages: List of messages in OpenAI format
+            message: Simple text message (mutually exclusive with messages)
+            image: Image binary data
+            image_url: Image URL
+            reset_context: Whether to reset context
+            model: Model name (gemini-3.0-flash/gemini-3.0-flash-thinking/gemini-3.0-pro)
         
         Returns:
-            ChatCompletionResponse: OpenAI 格式响应
+            ChatCompletionResponse: OpenAI format response
         """
         if reset_context:
             self.reset()
         
-        # 处理输入
+        # Process input
         text_parts = []
         images = []
         
         if messages:
-            # OpenAI 格式消息处理
-            # 如果已有会话上下文（conversation_id不为空），说明Gemini已经有历史记录
-            # 此时只需要处理用户消息，不需要重复发送assistant消息
+            # OpenAI format message processing
+            # If there is an existing conversation context (conversation_id is not empty), it means Gemini already has history
+            # In this case, only user messages need to be processed, and assistant messages do not need to be sent again
             has_context = bool(self.conversation_id)
             
             for msg in messages:
@@ -1015,12 +1015,12 @@ class GeminiClient:
                     if imgs:
                         images.extend(imgs)
                 elif role == "assistant":
-                    # 只有在没有Gemini上下文时才需要包含assistant消息
-                    # 否则Gemini已经知道这些回复
+                    # Only include assistant messages if there is no Gemini context
+                    # Otherwise, Gemini already knows these replies
                     if not has_context and isinstance(content, str) and content:
                         text_parts.append(f"[Previous response]: {content}")
                 elif role == "system":
-                    # system 消息作为前置指令（总是需要）
+                    # system messages as pre-instructions (always needed)
                     if isinstance(content, str) and content:
                         text_parts.insert(0, content)
                 
@@ -1049,14 +1049,14 @@ class GeminiClient:
             text = ""
         
         if not text:
-            raise ValueError("消息内容不能为空")
+            raise ValueError("Message content cannot be empty")
         
-        # 发送请求
+        # Send request
         return self._send_request(text, images, model)
 
     
     def _log_gemini_call(self, request_data: dict, response_text: str, error: str = None):
-        """记录 Gemini 内部调用日志"""
+        """Log Gemini internal call"""
         import datetime
         log_entry = {
             "timestamp": datetime.datetime.now().isoformat(),
@@ -1069,10 +1069,10 @@ class GeminiClient:
             with open("api_logs.json", "a", encoding="utf-8") as f:
                 f.write(json.dumps(log_entry, ensure_ascii=False, indent=2) + "\n---\n")
         except Exception as e:
-            print(f"[LOG ERROR] 写入 Gemini 日志失败: {e}")
+            print(f"[LOG ERROR] Failed to write Gemini log: {e}")
 
     def _send_request(self, text: str, images: List[Dict] = None, model: str = None) -> ChatCompletionResponse:
-        """发送请求到 Gemini"""
+        """Send request to Gemini"""
         url = f"{self.BASE_URL}/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate"
         
         params = {
@@ -1083,8 +1083,8 @@ class GeminiClient:
             "rt": "c",
         }
         
-        # 模型标识映射 (通过请求头 x-goog-ext-525001261-jspb 选择模型)
-        model_id = self.model_ids.get("flash", "56fdd199312815e2")  # 默认极速版
+        # Model ID mapping (select model via request header x-goog-ext-525001261-jspb)
+        model_id = self.model_ids.get("flash", "56fdd199312815e2")  # Default flash version
         if model:
             model_lower = model.lower()
             if "pro" in model_lower:
@@ -1092,24 +1092,24 @@ class GeminiClient:
             elif "thinking" in model_lower or "think" in model_lower:
                 model_id = self.model_ids.get("thinking", "e051ce1aa80aa576")
         
-        # 上传图片获取路径
+        # Upload images and get paths
         image_paths = []
         if images and len(images) > 0:
             if not self.push_id:
-                print("⚠️  图片上传需要 push-id，请运行: python get_push_id.py")
-                print("   然后将获取的 push-id 添加到 config.py")
+                print("⚠️  Image upload requires push-id, please run: python get_push_id.py")
+                print("   Then add the obtained push-id to config.py")
             else:
                 try:
                     for img in images:
-                        # 解码 base64 数据
+                        # Decode base64 data
                         img_data = base64.b64decode(img["data"])
-                        # 上传并获取路径
+                        # Upload and get path
                         path = self._upload_image(img_data, img["mime_type"])
                         image_paths.append(path)
                         if self.debug:
-                            print(f"[DEBUG] 图片上传成功: {path[:50]}...")
+                            print(f"[DEBUG] Image uploaded successfully: {path[:50]}...")
                 except Exception as e:
-                    print(f"⚠️  图片上传失败: {e}")
+                    print(f"⚠️  Image upload failed: {e}")
                     image_paths = []
         
         req_data = self._build_request_data(text, images, image_paths, model)
@@ -1119,12 +1119,12 @@ class GeminiClient:
             "at": self.snlm0e,
         }
         
-        # 模型选择请求头
+        # Model selection request headers
         model_headers = {
             "x-goog-ext-525001261-jspb": json.dumps([1, None, None, None, model_id, None, None, 0, [4], None, None, 2], separators=(',', ':')),
         }
         
-        # 构建日志记录
+        # Build log entry
         gemini_request_log = {
             "url": url,
             "params": params,
@@ -1137,13 +1137,13 @@ class GeminiClient:
         }
         
         if self.debug:
-            print(f"[DEBUG] 请求 URL: {url}")
+            print(f"[DEBUG] Request URL: {url}")
             print(f"[DEBUG] AT Token: {self.snlm0e[:30]}...")
-            print(f"[DEBUG] 模型: {model or '默认'}, ID: {model_id}")
+            print(f"[DEBUG] Model: {model or 'default'}, ID: {model_id}")
             if image_paths:
-                print(f"[DEBUG] 请求数据前300字符: {req_data[:300]}")
+                print(f"[DEBUG] Request data first 300 characters: {req_data[:300]}")
         
-        # 重试机制
+        # Retry mechanism
         max_retries = 3
         last_error = None
         
@@ -1152,14 +1152,14 @@ class GeminiClient:
                 resp = self.session.post(url, params=params, data=form_data, headers=model_headers, timeout=60.0)
             
                 if self.debug:
-                    print(f"[DEBUG] 响应状态: {resp.status_code}")
-                    print(f"[DEBUG] 响应内容前500字符: {resp.text[:500]}")
-                    # 始终保存完整响应用于调试
+                    print(f"[DEBUG] Response status: {resp.status_code}")
+                    print(f"[DEBUG] Response content first 500 characters: {resp.text[:500]}")
+                    # Always save full response for debugging
                     with open("debug_image_response.txt", "w", encoding="utf-8") as f:
                         f.write(resp.text)
-                    print(f"[DEBUG] 完整响应已保存到 debug_image_response.txt")
+                    print(f"[DEBUG] Full response saved to debug_image_response.txt")
                 
-                # 记录 Gemini 完整响应
+                # Log full Gemini response
                 self._log_gemini_call(gemini_request_log, resp.text)
                 
                 resp.raise_for_status()
@@ -1167,10 +1167,10 @@ class GeminiClient:
                 
                 reply_text = self._parse_response(resp.text)
                 
-                # 保存助手回复
+                # Save assistant reply
                 self.messages.append(Message(role="assistant", content=reply_text))
                 
-                # 构建 OpenAI 格式响应
+                # Build OpenAI format response
                 return ChatCompletionResponse(
                     id=f"chatcmpl-{self.conversation_id or 'gemini'}-{int(time.time())}",
                     created=int(time.time()),
@@ -1191,40 +1191,40 @@ class GeminiClient:
                 
             except httpx.HTTPStatusError as e:
                 self._log_gemini_call(gemini_request_log, e.response.text if hasattr(e, 'response') else "", error=f"HTTP {e.response.status_code}")
-                raise Exception(f"HTTP 错误: {e.response.status_code}")
+                raise Exception(f"HTTP error: {e.response.status_code}")
             except (httpx.RemoteProtocolError, httpx.ReadError, httpx.ConnectError) as e:
-                # 网络连接问题，可重试
+                # Network connection issues, retryable
                 last_error = e
                 if attempt < max_retries - 1:
-                    wait_time = (attempt + 1) * 2  # 2, 4 秒
-                    print(f"⚠️  连接中断，{wait_time}秒后重试 ({attempt + 1}/{max_retries})...")
+                    wait_time = (attempt + 1) * 2  # 2, 4 seconds
+                    print(f"⚠️  Connection interrupted, retrying after {wait_time} seconds ({attempt + 1}/{max_retries})...")
                     time.sleep(wait_time)
                     continue
                 self._log_gemini_call(gemini_request_log, "", error=str(e))
-                raise Exception(f"网络连接失败（已重试{max_retries}次）: {e}")
+                raise Exception(f"Network connection failed (retried {max_retries} times): {e}")
             except Exception as e:
                 self._log_gemini_call(gemini_request_log, "", error=str(e))
-                raise Exception(f"请求失败: {e}")
+                raise Exception(f"Request failed: {e}")
         
-        # 所有重试都失败
+        # All retries failed
         if last_error:
-            raise Exception(f"请求失败（已重试{max_retries}次）: {last_error}")
+            raise Exception(f"Request failed (retried {max_retries} times): {last_error}")
     
     def reset(self):
-        """重置会话上下文"""
+        """Reset session context"""
         self.conversation_id = ""
         self.response_id = ""
         self.choice_id = ""
         self.messages = []
     
     def get_history(self) -> List[Dict]:
-        """获取消息历史 (OpenAI 格式)"""
+        """Get message history (OpenAI format)"""
         return [{"role": m.role, "content": m.content} for m in self.messages]
 
 
-# OpenAI 兼容接口
+# OpenAI compatible interface
 class OpenAICompatible:
-    """OpenAI SDK 兼容封装"""
+    """OpenAI SDK compatible wrapper"""
     
     def __init__(self, client: GeminiClient):
         self.client = client
