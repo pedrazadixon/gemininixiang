@@ -1116,11 +1116,6 @@ def log_api_call(request_data: dict, response_data: dict, error: str = None):
         print(f"[LOG ERROR] 写入日志失败: {e}")
 
 
-# Simplified session: trust Gemini's conversation_id
-_last_request_time = 0
-SESSION_TIMEOUT_SECONDS = 1800  # 30 minutes of inactivity to reset
-
-
 def extract_last_user_message(messages: list) -> list:
     """
     Extract relevant messages to send to Gemini.
@@ -1214,12 +1209,7 @@ def should_reset_session(client, request: ChatCompletionRequest) -> bool:
     Determine if we should reset the Gemini session.
     Only reset on timeout or if there's no active session.
     """
-    global _last_request_time
     
-    current_time = time.time()
-
-
-
     # if there aren't any messages role 'assistant', 'tool', or 'function', reset session
     for m in request.messages:
         role = m.role if hasattr(m, 'role') else m.get('role', '')
@@ -1228,12 +1218,6 @@ def should_reset_session(client, request: ChatCompletionRequest) -> bool:
     else:
         # No assistant, tool, or function messages found, reset session
         print(f"[SESSION] No assistant/tool/function messages found, resetting session")
-        return True
-
-
-    # If timeout passed, reset
-    if _last_request_time > 0 and (current_time - _last_request_time) > SESSION_TIMEOUT_SECONDS:
-        print(f"[SESSION] Timeout of {SESSION_TIMEOUT_SECONDS}s reached, resetting session")
         return True
     
     # If no conversation_id, it's a new session anyway
@@ -1248,7 +1232,6 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
 
     print(f"\n")
 
-    global _last_request_time
     verify_api_key(authorization)
 
     # debug raw request and all headers into a file log 
@@ -1353,10 +1336,7 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
                 print(f"[SESSION] Tool call continuation (conv_id: {client.conversation_id[:20]}...). Sending tool results")
             else:
                 print(f"[SESSION] Active session (conv_id: {client.conversation_id[:20]}...). Sending only last message")
-        
-        # Update timestamp
-        _last_request_time = time.time()
-        
+                
         # If there are tools, add tool prompt directly to user message
         # IMPORTANT: Don't add tools_prompt in tool call continuations
         # because Gemini already has the context of available tools
