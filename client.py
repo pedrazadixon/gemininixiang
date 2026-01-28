@@ -170,15 +170,18 @@ class GeminiClient:
         # Message history
         self.messages: List[Message] = []
         
+        # Active gem for system prompts
+        self.active_gem_id: Optional[str] = None
+        
         # Validate required parameters
         if not self.snlm0e:
             raise ValueError(
-                "SNlM0e 是必填参数！\n"
-                "获取方法:\n"
-                "1. 打开 https://gemini.google.com 并登录\n"
-                "2. F12 -> 查看页面源代码 (Ctrl+U)\n"
-                "3. 搜索 'SNlM0e' 找到类似: \"SNlM0e\":\"xxxxxx\"\n"
-                "4. 复制引号内的值"
+                "SNlM0e is a required parameter! \n"
+                "How to obtain:\n"
+                "1. Open https://gemini.google.com and log in\n"
+                "2. Press F12 -> View page source (Ctrl+U)\n"
+                "3. Search for 'SNlM0e' to find something like: \"SNlM0e\":\"xxxxxx\"\n"
+                "4. Copy the value inside the quotes"
             )
         
         # Auto-fetch BL
@@ -209,6 +212,184 @@ class GeminiClient:
             self.bl = "boq_assistant-bard-web-server_20241209.00_p0"
             if self.debug:
                 print(f"[DEBUG] Failed to fetch BL, using default value: {e}")
+
+    # ============ Gem Management Methods ============
+    
+    def create_gem(self, name: str, prompt: str, description: str = "") -> str:
+        """
+        Create a new custom gem with system instructions.
+        
+        Args:
+            name: Name of the custom gem
+            prompt: System instructions for the custom gem
+            description: Description of the custom gem (optional)
+            
+        Returns:
+            str: The created gem ID
+        """
+        url = f"{self.BASE_URL}/_/BardChatUi/data/batchexecute"
+        
+        # Build payload for gem creation (based on oMH3Zd RPC)
+        gem_data = [
+            [
+                name,
+                description,
+                prompt,
+                None,
+                None,
+                None,
+                None,
+                None,
+                0,
+                None,
+                1,
+                None,
+                None,
+                None,
+                [],
+            ]
+        ]
+        
+        payload = json.dumps(gem_data, ensure_ascii=False, separators=(',', ':'))
+        
+        # Build request in batchexecute format
+        rpcid = "oMH3Zd"  # CREATE_GEM RPC ID
+        
+        req_data = json.dumps([
+            [[rpcid, payload, None, "generic"]]
+        ], ensure_ascii=False, separators=(',', ':'))
+        
+        params = {
+            "rpcids": rpcid,
+            "source-path": "/app",
+            "f.sid": "",
+            "bl": self.bl,
+            "hl": "zh-CN",
+            "_reqid": str(self.request_count * 100000 + random.randint(10000, 99999)),
+            "rt": "c",
+        }
+        
+        form_data = {
+            "f.req": req_data,
+            "at": self.snlm0e,
+        }
+        
+        if self.debug:
+            print(f"[DEBUG] Creating gem: {name}")
+            print(f"[DEBUG] Prompt preview: {prompt[:100]}...")
+        
+        try:
+            resp = self.session.post(url, params=params, data=form_data, timeout=30.0)
+            resp.raise_for_status()
+            self.request_count += 1
+            
+            if self.debug:
+                print(f"[DEBUG] Create gem response status: {resp.status_code}")
+            
+            # Parse response to extract gem ID
+            # Response format: )]}'\n\n123\n[["wrb.fr","oMH3Zd","[\"gem_id\"]",...]]
+            text = resp.text
+            lines = text.split('\n')
+            
+            for line in lines:
+                if rpcid in line:
+                    try:
+                        # Find the JSON array containing the response
+                        start = line.find('[')
+                        if start >= 0:
+                            data = json.loads(line[start:])
+                            # Navigate to gem_id: data[0][2] contains the gem data JSON string
+                            if data and len(data) > 0 and len(data[0]) > 2:
+                                gem_response = json.loads(data[0][2])
+                                if gem_response and len(gem_response) > 0:
+                                    gem_id = gem_response[0]
+                                    if self.debug:
+                                        print(f"[DEBUG] Created gem ID: {gem_id}")
+                                    return gem_id
+                    except (json.JSONDecodeError, IndexError, TypeError) as e:
+                        if self.debug:
+                            print(f"[DEBUG] Failed to parse gem response: {e}")
+                        continue
+            
+            # Fallback: try to find any gem ID pattern in response
+            gem_id_match = re.search(r'"([a-f0-9\-]{20,})"', text)
+            if gem_id_match:
+                gem_id = gem_id_match.group(1)
+                if self.debug:
+                    print(f"[DEBUG] Found gem ID via regex: {gem_id}")
+                return gem_id
+                
+            raise Exception("Could not extract gem ID from response")
+            
+        except Exception as e:
+            if self.debug:
+                print(f"[DEBUG] Failed to create gem: {e}")
+            raise Exception(f"Failed to create gem: {e}")
+    
+    def delete_gem(self, gem_id: str) -> bool:
+        """
+        Delete a custom gem.
+        
+        Args:
+            gem_id: The ID of the gem to delete
+            
+        Returns:
+            bool: True if deletion was successful
+        """
+        url = f"{self.BASE_URL}/_/BardChatUi/data/batchexecute"
+        
+        rpcid = "UXcSJb"  # DELETE_GEM RPC ID
+        payload = json.dumps([gem_id], ensure_ascii=False, separators=(',', ':'))
+        
+        req_data = json.dumps([
+            [[rpcid, payload, None, "generic"]]
+        ], ensure_ascii=False, separators=(',', ':'))
+        
+        params = {
+            "rpcids": rpcid,
+            "source-path": "/app",
+            "f.sid": "",
+            "bl": self.bl,
+            "hl": "zh-CN",
+            "_reqid": str(self.request_count * 100000 + random.randint(10000, 99999)),
+            "rt": "c",
+        }
+        
+        form_data = {
+            "f.req": req_data,
+            "at": self.snlm0e,
+        }
+        
+        if self.debug:
+            print(f"[DEBUG] Deleting gem: {gem_id}")
+        
+        try:
+            resp = self.session.post(url, params=params, data=form_data, timeout=30.0)
+            resp.raise_for_status()
+            self.request_count += 1
+            
+            if self.debug:
+                print(f"[DEBUG] Gem deleted successfully")
+            return True
+            
+        except Exception as e:
+            if self.debug:
+                print(f"[DEBUG] Failed to delete gem: {e}")
+            return False
+    
+    def set_active_gem(self, gem_id: Optional[str]):
+        """
+        Set the active gem to use for conversations.
+        
+        Args:
+            gem_id: The gem ID to use, or None to clear
+        """
+        self.active_gem_id = gem_id
+        if self.debug:
+            if gem_id:
+                print(f"[DEBUG] Active gem set to: {gem_id}")
+            else:
+                print(f"[DEBUG] Active gem cleared")
 
 
     
@@ -436,8 +617,16 @@ class GeminiClient:
                     return result
         return None
     
-    def _build_request_data(self, text: str, images: List[Dict] = None, image_paths: List[str] = None, model: str = None) -> str:
-        """Build request data - based on real request format"""
+    def _build_request_data(self, text: str, images: List[Dict] = None, image_paths: List[str] = None, model: str = None, gem_id: str = None) -> str:
+        """Build request data - based on real request format
+        
+        Args:
+            text: The text prompt
+            images: List of image data dicts
+            image_paths: List of uploaded image paths
+            model: Model name to use
+            gem_id: Optional gem ID to use for system prompt
+        """
         # Session context (empty string means new conversation)
         conv_id = self.conversation_id or ""
         resp_id = self.response_id or ""
@@ -469,6 +658,9 @@ class GeminiClient:
                 model_code = [[3]]  # Thinking version
             # flash or other cases keep default [[1]]
         
+        # Use provided gem_id or the active gem
+        active_gem = gem_id or self.active_gem_id
+        
         # Construct internal JSON array (based on real request format)
         # First element: [text, 0, null, image_data, null, null, 0]
         inner_data = [
@@ -489,9 +681,9 @@ class GeminiClient:
             None,
             None,
             None,
-            model_code,  # Model selection field
+            model_code,  # Model selection field (index 17)
             0,
-            None,
+            active_gem,  # Gem ID at index 19 (based on reference project pattern)
             None,
             None,
             None,
@@ -540,6 +732,9 @@ class GeminiClient:
             None,
             [timestamp // 1000, (timestamp % 1000) * 1000000]
         ]
+        
+        if self.debug and active_gem:
+            print(f"[DEBUG] Using gem ID in request: {active_gem}")
         
         # 序列化为 JSON 字符串
         inner_json = json.dumps(inner_data, ensure_ascii=False, separators=(',', ':'))
@@ -1217,6 +1412,7 @@ class GeminiClient:
         self.response_id = ""
         self.choice_id = ""
         self.messages = []
+        self.active_gem_id = None
     
     def get_history(self) -> List[Dict]:
         """Get message history (OpenAI format)"""

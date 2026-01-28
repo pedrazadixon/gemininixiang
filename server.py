@@ -29,6 +29,7 @@ CONFIG_FILE = "config_data.json"
 # Admin login credentials
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = "admin123"
+CREATE_GEMINI_GEMS = True
 # ========================================
 
 app = FastAPI(title="Gemini OpenAI API", version="1.0.0")
@@ -1293,13 +1294,57 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
         last_msg = request.messages[-1] if request.messages else None
         last_role = (last_msg.role if hasattr(last_msg, 'role') else last_msg.get('role', '')) if last_msg else ''
         is_tool_continuation = last_role in ('tool', 'function')
+        use_gem = False
         
         if needs_reset:
             client.reset()
-            # New session: send all messages to establish context
-            messages = [{"role": m.role if hasattr(m, 'role') else m.get('role', ''),
-                        "content": m.content if hasattr(m, 'content') else m.get('content', '')} 
-                       for m in request.messages]
+
+            messages = []
+            system_prompt = None
+            
+            for m in request.messages:
+                role = m.role if hasattr(m, 'role') else m.get('role', '')
+
+                print(f"[SESSION] Adding message role={role} to new session")
+
+                if role == "system":
+                    use_gem = True
+                    # Extract system prompt content for gem creation
+                    system_prompt = m.content if hasattr(m, 'content') else m.get('content', '')
+
+                content = m.content if hasattr(m, 'content') else m.get('content', '')
+                messages.append({"role": role, "content": content})
+            
+            # Create gem from system prompt if present (only if CREATE_GEMINI_GEMS is enabled)
+            if CREATE_GEMINI_GEMS and use_gem and system_prompt:
+                try:
+                    # Generate a unique name for this gem session
+                    gem_name = f"system_{uuid.uuid4().hex[:8]}"
+                    print(f"[GEM] Creating gem with system prompt ({len(system_prompt)} chars)")
+                    
+                    gem_id = client.create_gem(
+                        name=gem_name,
+                        prompt=system_prompt,
+                        description="Auto-generated system prompt gem"
+                    )
+                    
+                    if gem_id:
+                        client.set_active_gem(gem_id)
+                        print(f"[GEM] Gem created and activated: {gem_id}")
+                        
+                        # Remove system message from messages since it's now in the gem
+                        messages = [m for m in messages if m.get("role") != "system"]
+                    else:
+                        print(f"[GEM] Warning: Gem creation returned no ID, using system message in prompt")
+                        use_gem = False
+                        
+                except Exception as e:
+                    print(f"[GEM] Failed to create gem: {e}")
+                    print(f"[GEM] Falling back to including system message in prompt")
+                    use_gem = False
+            elif use_gem and not CREATE_GEMINI_GEMS:
+                print(f"[GEM] Gem creation disabled (CREATE_GEMINI_GEMS=False), keeping system message in prompt")
+
             print(f"[SESSION] New session started. Sending {len(messages)} message(s) to establish context")
         else:
             # Existing session: extract relevant messages
