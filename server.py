@@ -1115,123 +1115,6 @@ def log_api_call(request_data: dict, response_data: dict, error: str = None):
         print(f"[LOG ERROR] 写入日志失败: {e}")
 
 
-# Simplified session: trust Gemini's conversation_id
-_last_request_time = 0
-SESSION_TIMEOUT_SECONDS = 1800  # 30 minutes of inactivity to reset
-
-
-def extract_last_user_message(messages: list) -> list:
-    """
-    Extract relevant messages to send to Gemini.
-    
-    IMPORTANT for agents (opencode, etc.):
-    - First check the LAST message to determine intent
-    - If last message is 'tool'/'function', it's a tool call continuation
-    - If last message is 'user', it's a NEW question (ignore old tools in history)
-    """
-    def to_dict(m):
-        role = m.role if hasattr(m, 'role') else m.get('role', '')
-        content = m.content if hasattr(m, 'content') else m.get('content', '')
-        return {"role": role, "content": content}
-    
-    def get_role(m):
-        return m.role if hasattr(m, 'role') else m.get('role', '')
-    
-    # DEBUG: Show all received messages
-    # print(f"[DEBUG] Received {len(messages)} messages:")
-    for i, m in enumerate(messages):
-        role = get_role(m)
-        content = m.content if hasattr(m, 'content') else m.get('content', '')
-        content_preview = str(content)[:100] + "..." if len(str(content)) > 100 else str(content)
-        tool_call_id = getattr(m, 'tool_call_id', None) or (m.get('tool_call_id') if isinstance(m, dict) else None)
-        name = getattr(m, 'name', None) or (m.get('name') if isinstance(m, dict) else None)
-        # print(f"  [{i}] role={role}, tool_call_id={tool_call_id}, name={name}, content={content_preview}")
-    
-    if not messages:
-        return []
-    
-    # KEY: Check the LAST message type to determine intent
-    last_message = messages[-1]
-    last_role = get_role(last_message)
-    
-    print(f"[DEBUG] Last message has role={last_role}")
-    
-    # If last message is from user, it's a NEW question
-    # Ignore any previous tool/function messages in history
-    if last_role == 'user':
-        print(f"[SESSION] New user question detected (ignoring tools history)")
-        return [to_dict(last_message)]
-    
-    # If last message is tool/function, collect ONLY the tool results
-    # that come at the end (after the last assistant)
-    if last_role in ('tool', 'function'):
-        # Find the index of the last assistant message
-        last_assistant_idx = -1
-        for i in range(len(messages) - 1, -1, -1):
-            if get_role(messages[i]) == 'assistant':
-                last_assistant_idx = i
-                break
-        
-        # Collect only tool results that come AFTER the last assistant
-        tool_results = []
-        start_idx = last_assistant_idx + 1 if last_assistant_idx >= 0 else 0
-        
-        for m in messages[start_idx:]:
-            role = get_role(m)
-            if role in ('tool', 'function'):
-                content = m.content if hasattr(m, 'content') else m.get('content', '')
-                tool_call_id = getattr(m, 'tool_call_id', '') if hasattr(m, 'tool_call_id') else m.get('tool_call_id', '') if isinstance(m, dict) else ''
-                name = getattr(m, 'name', '') if hasattr(m, 'name') else m.get('name', '') if isinstance(m, dict) else ''
-                
-                tool_name = name or tool_call_id or 'unknown_tool'
-                tool_result = f"[Tool Result for {tool_name}]:\n{content}"
-                tool_results.append(tool_result)
-                print(f"[DEBUG] Found recent tool result: name={name}, id={tool_call_id}, content_len={len(str(content))}")
-        
-        if tool_results:
-            print(f"[SESSION] Sending {len(tool_results)} recent tool result(s) to Gemini")
-            combined_result = "\n\n".join(tool_results)
-            instruction = (
-                "The tool has been executed successfully. Here are the results:\n\n"
-                f"{combined_result}\n\n"
-                "Based on these results, please continue with the next step or provide your analysis. "
-                "Do NOT call the same tool again with the same parameters - the results are already provided above."
-            )
-            return [{"role": "user", "content": instruction}]
-    
-    # Fallback: search for the last user message
-    for m in reversed(messages):
-        if get_role(m) == 'user':
-            return [to_dict(m)]
-    
-    # If no user message, return all
-    return [to_dict(m) for m in messages]
-
-
-def should_reset_session(client) -> bool:
-
-    return True
-
-    """
-    Determine if we should reset the Gemini session.
-    Only reset on timeout or if there's no active session.
-    """
-    global _last_request_time
-    
-    current_time = time.time()
-    
-    # If timeout passed, reset
-    if _last_request_time > 0 and (current_time - _last_request_time) > SESSION_TIMEOUT_SECONDS:
-        print(f"[SESSION] Timeout of {SESSION_TIMEOUT_SECONDS}s reached, resetting session")
-        return True
-    
-    # If no conversation_id, it's a new session anyway
-    if not client.conversation_id:
-        return True
-    
-    return False
-
-
 @app.post("/v1/chat/completions")
 async def chat_completions(request: ChatCompletionRequest, authorization: str = Header(None)):
     global _last_request_time
@@ -1239,7 +1122,6 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
     # debug raw request and all headers into a file log 
     with open("logs_raw_requests.log", "a", encoding="utf-8") as log_file:
         log_file.write(json.dumps(request.model_dump(), ensure_ascii=False, indent=2))
-        log_file.write(f"\n{json.dumps(dict(request.__dict__.get('__headers__', {})), ensure_ascii=False, indent=2)}")
         log_file.write("\n---\n")
     
     # Log tool responses specifically for debugging
@@ -1258,6 +1140,7 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
         "messages": [],
         "tools": [t.model_dump() for t in request.tools] if request.tools else None
     }
+
     for m in request.messages:
         msg_log = {"role": m.role}
         if isinstance(m.content, list):
@@ -1280,40 +1163,25 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
     try:
         client = get_client()
         
-        # Check if we need to reset
-        needs_reset = should_reset_session(client)
+        # Always reset session - external apps will send full message history
+        client.reset()
         
-        # Detect if it's a tool call continuation
-        # IMPORTANT: Only continuation if LAST message is tool/function
-        # Not if there are old tool messages in history
+        # Send all messages to establish context
+        messages = [{"role": m.role if hasattr(m, 'role') else m.get('role', ''),
+                    "content": m.content if hasattr(m, 'content') else m.get('content', '')} 
+                   for m in request.messages]
+        print(f"[SESSION] New session created. Sending {len(messages)} message(s) from history")
+        
+        # Detect if it's a tool call continuation (for logging purposes)
         last_msg = request.messages[-1] if request.messages else None
         last_role = (last_msg.role if hasattr(last_msg, 'role') else last_msg.get('role', '')) if last_msg else ''
         is_tool_continuation = last_role in ('tool', 'function')
         
-        if needs_reset:
-            client.reset()
-            # New session: send all messages to establish context
-            messages = [{"role": m.role if hasattr(m, 'role') else m.get('role', ''),
-                        "content": m.content if hasattr(m, 'content') else m.get('content', '')} 
-                       for m in request.messages]
-            print(f"[SESSION] New session started. Sending {len(messages)} message(s) to establish context")
-        else:
-            # Existing session: extract relevant messages
-            messages = extract_last_user_message(request.messages)
-            if is_tool_continuation:
-                print(f"[SESSION] Tool call continuation (conv_id: {client.conversation_id[:20]}...). Sending tool results")
-            else:
-                print(f"[SESSION] Active session (conv_id: {client.conversation_id[:20]}...). Sending only last message")
-        
-        # Update timestamp
-        _last_request_time = time.time()
-        
-        # If there are tools, add tool prompt directly to user message
-        # IMPORTANT: Don't add tools_prompt in tool call continuations
-        # because Gemini already has the context of available tools
-        if request.tools and len(messages) > 0 and not is_tool_continuation:
+        # If there are tools, add tool prompt to the first user message
+        if request.tools and len(messages) > 0:
             tools_prompt = build_tools_prompt([t.model_dump() for t in request.tools])
-            for i in range(len(messages) - 1, -1, -1):
+            # Find the first user message to add tools context
+            for i in range(len(messages)):
                 if messages[i]["role"] == "user":
                     original = messages[i]["content"]
                     if isinstance(original, str):
