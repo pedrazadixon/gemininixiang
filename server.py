@@ -1249,7 +1249,6 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
 
     global _last_request_time
     verify_api_key(authorization)
-    
 
     # debug raw request and all headers into a file log 
     with open("log_raw_requests.log", "a", encoding="utf-8") as log_file:
