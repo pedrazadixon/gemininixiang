@@ -1,15 +1,15 @@
 """
-Gemini OpenAI 兼容 API
+Gemini OpenAI compatible API
 
-提供与 OpenAI SDK 完全兼容的接口，可直接替换 openai 库使用
+Provides an interface fully compatible with the OpenAI SDK, allowing direct replacement of the OpenAI library.
 
-使用方法:
+Usage:
     from api import GeminiOpenAI
     
     client = GeminiOpenAI()
     response = client.chat.completions.create(
         model="gemini",
-        messages=[{"role": "user", "content": "你好"}]
+        messages=[{"role": "user", "content": "Hello"}]
     )
     print(response.choices[0].message.content)
 """
@@ -23,9 +23,9 @@ import time
 
 class GeminiOpenAI:
     """
-    OpenAI SDK 兼容的 Gemini 客户端
+    OpenAI SDK compatible Gemini client
     
-    用法与 openai.OpenAI() 完全一致
+    Usage is exactly the same as openai.OpenAI()
     """
     
     def __init__(
@@ -36,13 +36,13 @@ class GeminiOpenAI:
         secure_1psid: str = None,
     ):
         """
-        初始化客户端
+        Initialize the client
         
         Args:
-            cookies_str: 完整 cookie 字符串（推荐，图片功能必需）
-            snlm0e: AT Token（必填）
-            push_id: 图片上传 ID（图片功能必需）
-            secure_1psid: __Secure-1PSID cookie（如果不用 cookies_str）
+            cookies_str: Complete cookie string (recommended, required for image functionality)
+            snlm0e: AT Token (required)
+            push_id: Image upload ID (required for image functionality)
+            secure_1psid: __Secure-1PSID cookie (if not using cookies_str)
         """
         self._client = GeminiClient(
             secure_1psid=secure_1psid or SECURE_1PSID,
@@ -70,66 +70,66 @@ class GeminiOpenAI:
                 **kwargs
             ) -> ChatCompletionResponse:
                 """
-                创建聊天完成
+                Create a chat completion
                 
                 Args:
-                    model: 模型名称（忽略，始终使用 Gemini）
-                    messages: OpenAI 格式消息列表
-                    stream: 是否流式输出（暂不支持）
-                    **kwargs: 其他参数（忽略）
+                    model: Model name (ignored, always uses Gemini)
+                    messages: List of messages in OpenAI format
+                    stream: Whether to output in streaming mode (not supported yet)
+                    **kwargs: Other parameters (ignored)
                 
                 Returns:
-                    ChatCompletionResponse: OpenAI 格式响应
+                    ChatCompletionResponse: OpenAI format response
                 
                 Example:
-                    # 纯文本
+                    # Plain text
                     response = client.chat.completions.create(
                         model="gemini",
-                        messages=[{"role": "user", "content": "你好"}]
+                        messages=[{"role": "user", "content": "Hello"}]
                     )
                     
-                    # 带图片
+                    # With image
                     response = client.chat.completions.create(
                         model="gemini",
                         messages=[{
                             "role": "user",
                             "content": [
-                                {"type": "text", "text": "这是什么？"},
+                                {"type": "text", "text": "What is this?"},
                                 {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
                             ]
                         }]
                     )
                 """
                 if stream:
-                    raise NotImplementedError("流式输出暂不支持")
+                    raise NotImplementedError("Streaming output is not supported yet")
                 
                 return self._client.chat(messages=messages)
     
     def reset(self):
-        """重置会话上下文"""
+        """Reset the session context"""
         self._client.reset()
     
     def get_history(self) -> List[Dict]:
-        """获取消息历史"""
+        """Get message history"""
         return self._client.get_history()
 
 
-# 便捷函数
+# Convenience functions
 def create_client(
     cookies_str: str = None,
     snlm0e: str = None,
     push_id: str = None,
 ) -> GeminiOpenAI:
     """
-    创建 Gemini 客户端（OpenAI 兼容）
+    Create a Gemini client (OpenAI compatible)
     
     Args:
-        cookies_str: 完整 cookie 字符串
+        cookies_str: Complete cookie string
         snlm0e: AT Token
-        push_id: 图片上传 ID
+        push_id: Image upload ID
     
     Returns:
-        GeminiOpenAI: OpenAI 兼容客户端
+        GeminiOpenAI: OpenAI compatible client
     """
     return GeminiOpenAI(
         cookies_str=cookies_str,
@@ -145,28 +145,28 @@ def chat(
     reset: bool = False,
 ) -> str:
     """
-    快速聊天函数（单例模式）
+    Quick chat function (singleton pattern)
     
     Args:
-        message: 消息文本
-        image: 图片二进制数据
-        image_path: 图片文件路径
-        reset: 是否重置上下文
+        message: Message text
+        image: Image binary data
+        image_path: Image file path
+        reset: Whether to reset the context
     
     Returns:
-        str: AI 回复文本
+        str: AI reply text
     
     Example:
         from api import chat
         
-        # 纯文本
-        reply = chat("你好")
+        # Plain text
+        reply = chat("Hello")
         
-        # 带图片
-        reply = chat("这是什么？", image_path="photo.jpg")
+        # With image
+        reply = chat("What is this?", image_path="photo.jpg")
         
-        # 重置上下文
-        reply = chat("新话题", reset=True)
+        # Reset context
+        reply = chat("New topic", reset=True)
     """
     global _default_client
     
@@ -176,7 +176,7 @@ def chat(
     if reset:
         _default_client.reset()
     
-    # 处理图片
+    # Process image
     img_data = None
     if image:
         img_data = image
@@ -184,7 +184,7 @@ def chat(
         with open(image_path, 'rb') as f:
             img_data = f.read()
     
-    # 构建消息
+    # Construct messages
     if img_data:
         messages = [{
             "role": "user",

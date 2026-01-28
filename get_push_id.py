@@ -1,8 +1,8 @@
 """
-获取 Gemini 的 push-id
+Get Gemini's push-id
 
-push-id 是图片上传所需的必要参数，格式为 feeds/xxxxx
-需要从 Gemini 页面或 API 获取
+push-id is a necessary parameter for image uploads, in the format feeds/xxxxx
+It needs to be obtained from the Gemini page or API
 """
 
 import httpx
@@ -11,8 +11,8 @@ from config import SECURE_1PSID, SECURE_1PSIDTS, SECURE_1PSIDCC, COOKIES_STR
 
 
 def get_push_id_from_page():
-    """从 Gemini 页面获取 push-id"""
-    print("正在获取 push-id...")
+    """Get push-id from Gemini page"""
+    print("Getting push-id...")
     
     session = httpx.Client(
         timeout=30.0,
@@ -24,7 +24,7 @@ def get_push_id_from_page():
         }
     )
     
-    # 设置 cookies
+    # Set cookies
     if COOKIES_STR:
         for item in COOKIES_STR.split(";"):
             item = item.strip()
@@ -39,16 +39,16 @@ def get_push_id_from_page():
             session.cookies.set("__Secure-1PSIDCC", SECURE_1PSIDCC, domain=".google.com")
     
     try:
-        # 访问 Gemini 主页
+        # Access Gemini homepage
         resp = session.get("https://gemini.google.com")
         
         if resp.status_code != 200:
-            print(f"❌ 访问失败: {resp.status_code}")
+            print(f"❌ Access failed: {resp.status_code}")
             return None
         
         html = resp.text
         
-        # 尝试多种模式匹配 push-id
+        # Try multiple patterns to match push-id
         patterns = [
             r'"push[_-]?id["\s:]+["\'](feeds/[a-z0-9]+)["\']',  # "push_id": "feeds/xxx"
             r'push[_-]?id["\s:=]+["\'](feeds/[a-z0-9]+)["\']',  # push_id="feeds/xxx"
@@ -61,26 +61,26 @@ def get_push_id_from_page():
             matches = re.findall(pattern, html, re.IGNORECASE)
             if matches:
                 push_id = matches[0]
-                print(f"✅ 找到 push-id: {push_id}")
+                print(f"✅ Found push-id: {push_id}")
                 return push_id
         
-        # 如果没找到，保存页面源码供分析
+        # If not found, save page source for analysis
         with open("gemini_page_debug.html", "w", encoding="utf-8") as f:
             f.write(html)
-        print("❌ 未找到 push-id")
-        print("   页面源码已保存到 gemini_page_debug.html")
-        print("   请手动搜索 'feeds/' 或 'push' 关键字")
+        print("❌ push-id not found")
+        print("   Page source saved to gemini_page_debug.html")
+        print("   Please manually search for 'feeds/' or 'push' keywords")
         
         return None
         
     except Exception as e:
-        print(f"❌ 错误: {e}")
+        print(f"❌ Error: {e}")
         return None
 
 
 def get_push_id_from_api():
-    """尝试从 API 获取 push-id"""
-    print("\n尝试从 API 获取 push-id...")
+    """Try to get push-id from API"""
+    print("\nTrying to get push-id from API...")
     
     session = httpx.Client(
         timeout=30.0,
@@ -91,7 +91,7 @@ def get_push_id_from_api():
         }
     )
     
-    # 设置 cookies
+    # Set cookies
     if COOKIES_STR:
         for item in COOKIES_STR.split(";"):
             item = item.strip()
@@ -101,7 +101,7 @@ def get_push_id_from_api():
     else:
         session.cookies.set("__Secure-1PSID", SECURE_1PSID, domain=".google.com")
     
-    # 可能的 API 端点
+    # Possible API endpoints
     endpoints = [
         "https://gemini.google.com/_/BardChatUi/data/batchexecute",
         "https://push.clients6.google.com/v1/feeds",
@@ -112,12 +112,12 @@ def get_push_id_from_api():
             resp = session.get(endpoint)
             print(f"  {endpoint}: {resp.status_code}")
             if resp.status_code == 200:
-                # 尝试从响应中提取 push-id
+                # Try to extract push-id from response
                 text = resp.text
                 match = re.search(r'feeds/[a-z0-9]{14,}', text)
                 if match:
                     push_id = match.group(0)
-                    print(f"  ✅ 找到: {push_id}")
+                    print(f"  ✅ Found: {push_id}")
                     return push_id
         except Exception as e:
             print(f"  ❌ {endpoint}: {e}")
@@ -127,30 +127,30 @@ def get_push_id_from_api():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("获取 Gemini push-id")
+    print("Get Gemini push-id")
     print("=" * 60)
     
-    # 方法1: 从页面获取
+    # Method 1: Get from page
     push_id = get_push_id_from_page()
     
-    # 方法2: 从 API 获取
+    # Method 2: Get from API
     if not push_id:
         push_id = get_push_id_from_api()
     
     if push_id:
         print("\n" + "=" * 60)
-        print(f"✅ 成功获取 push-id: {push_id}")
+        print(f"✅ Successfully obtained push-id: {push_id}")
         print("=" * 60)
-        print("\n请将此值添加到 config.py:")
+        print("\nPlease add this value to config.py:")
         print(f'PUSH_ID = "{push_id}"')
     else:
         print("\n" + "=" * 60)
-        print("❌ 未能自动获取 push-id")
+        print("❌ Failed to automatically obtain push-id")
         print("=" * 60)
-        print("\n手动获取方法:")
-        print("1. 打开 https://gemini.google.com 并登录")
-        print("2. F12 打开开发者工具 -> Network 标签")
-        print("3. 上传一张图片")
-        print("4. 查找 upload 请求")
-        print("5. 在请求头中找到 push-id 或 x-goog-upload-header-content-length")
-        print("6. 复制 feeds/xxxxx 格式的值")
+        print("\nManual retrieval method:")
+        print("1. Open https://gemini.google.com and log in")
+        print("2. Press F12 to open Developer Tools -> Network tab")
+        print("3. Upload an image")
+        print("4. Find the upload request")
+        print("5. In the request headers, find push-id or x-goog-upload-header-content-length")
+        print("6. Copy the value in the format feeds/xxxxx")

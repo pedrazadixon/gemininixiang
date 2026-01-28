@@ -172,7 +172,7 @@ def fetch_tokens_from_page(cookies_str: str) -> dict:
             }
         )
         
-        # 设置 cookies
+        # Set up cookies
         for item in cookies_str.split(";"):
             item = item.strip()
             if "=" in item:
@@ -185,7 +185,7 @@ def fetch_tokens_from_page(cookies_str: str) -> dict:
         
         html = resp.text
         
-        # 获取 SNLM0E (AT Token)
+        # Get SNLM0E (AT Token)
         snlm0e_patterns = [
             r'"SNlM0e":"([^"]+)"',
             r'SNlM0e["\s:]+["\']([^"\']+)["\']',
@@ -197,7 +197,7 @@ def fetch_tokens_from_page(cookies_str: str) -> dict:
                 result["snlm0e"] = match.group(1)
                 break
         
-        # 获取 PUSH_ID
+        # Get PUSH_ID
         push_id_patterns = [
             r'"push[_-]?id["\s:]+["\'](feeds/[a-z0-9]+)["\']',
             r'push[_-]?id["\s:=]+["\'](feeds/[a-z0-9]+)["\']',
@@ -294,8 +294,8 @@ def parse_tool_calls(content: str) -> tuple:
     
     # Multiple matching patterns
     patterns = [
-        r'```tool_call\s*\n?(.*?)\n?```',  # ```tool_call ... ```
-        r'```json\s*\n?(.*?)\n?```',        # ```json ... ``` (sometimes models use this)
+        r'```tool_call\s*\n?(.*?)\n?```',          # ```tool_call ... ```
+        r'```json\s*\n?(.*?)\n?```',               # ```json ... ``` (sometimes models use this)
         r'```\s*\n?(\{[^`]*"name"[^`]*\})\n?```',  # ``` {...} ```
     ]
     
@@ -414,7 +414,7 @@ def get_client():
 
 def get_login_html():
     return '''<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en-US">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -502,7 +502,7 @@ def get_login_html():
 
 def get_admin_html():
     return '''<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en-US">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -653,7 +653,7 @@ for chunk in stream:
         </div>
     </div>
     
-    <!-- 图片放大模态框 -->
+    <!-- Image Zoom Modal -->
     <div id="imageModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:1000;justify-content:center;align-items:center;cursor:pointer;" onclick="hideImageModal()">
         <img src="/static/image.png" alt="Sample Image" style="max-width:90%;max-height:90%;border-radius:8px;box-shadow:0 0 30px rgba(0,0,0,0.5);">
         <span style="position:absolute;top:20px;right:30px;color:white;font-size:30px;cursor:pointer;">&times;</span>
@@ -684,10 +684,10 @@ for chunk in stream:
         document.getElementById('codeUrl2').textContent = 'http://localhost:' + PORT + '/v1';
         document.getElementById('codeKey2').textContent = API_KEY;
         
-        // 解析模型 ID (从 x-goog-ext-525001261-jspb 数组中提取)
+        // Parse model ID (extracted from x-goog-ext-525001261-jspb array)
         function parseModelId(input) {
             try {
-                // 尝试解析 JSON 数组
+                // Try to parse JSON array
                 const arr = JSON.parse(input);
                 if (Array.isArray(arr) && arr.length > 4 && typeof arr[4] === 'string') {
                     return arr[4];
@@ -709,11 +709,11 @@ for chunk in stream:
             const infoBox = document.getElementById('parsedModelId');
             
             if (modelId) {
-                container.innerHTML = '<div class="item">提取到的 ID: <span style="color:#059669;font-family:monospace;">' + modelId + '</span></div>' +
+                container.innerHTML = '<div class="item">Extracted ID: <span style="color:#059669;font-family:monospace;">' + modelId + '</span></div>' +
                     '<div style="margin-top:10px;">' +
-                    '<button type="button" onclick="fillModelId(\\'flash\\', \\'' + modelId + '\\')" style="margin-right:5px;padding:5px 10px;cursor:pointer;">填入极速版</button>' +
-                    '<button type="button" onclick="fillModelId(\\'pro\\', \\'' + modelId + '\\')" style="margin-right:5px;padding:5px 10px;cursor:pointer;">填入Pro版</button>' +
-                    '<button type="button" onclick="fillModelId(\\'thinking\\', \\'' + modelId + '\\')" style="padding:5px 10px;cursor:pointer;">填入思考版</button>' +
+                    '<button type="button" onclick="fillModelId(\\'flash\\', \\'' + modelId + '\\')" style="margin-right:5px;padding:5px 10px;cursor:pointer;">Fill Flash Version</button>' +
+                    '<button type="button" onclick="fillModelId(\\'pro\\', \\'' + modelId + '\\')" style="margin-right:5px;padding:5px 10px;cursor:pointer;">Fill Pro Version</button>' +
+                    '<button type="button" onclick="fillModelId(\\'thinking\\', \\'' + modelId + '\\')" style="padding:5px 10px;cursor:pointer;">Fill Thinking Version</button>' +
                     '</div>';
                 infoBox.style.display = 'block';
             } else {
@@ -803,7 +803,7 @@ for chunk in stream:
         
         // Load configuration
         fetch('/admin/config', {credentials: 'same-origin'}).then(r => {
-            if (!r.ok) throw new Error('未登录');
+            if (!r.ok) throw new Error('Not logged in');
             return r.json();
         }).then(config => {
             if (config.FULL_COOKIE) {
@@ -1468,7 +1468,7 @@ if __name__ == "__main__":
 ╠══════════════════════════════════════════════════════════╣
 ║  Admin: http://localhost:{PORT}/admin                      ║
 ║  API URL: http://localhost:{PORT}/v1                       ║
-║  API Key:  {API_KEY}                                ║
+║  API Key:  {API_KEY}                                     ║
 ╚══════════════════════════════════════════════════════════╝
 """)
     uvicorn.run(app, host=HOST, port=PORT)
