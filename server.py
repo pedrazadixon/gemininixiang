@@ -22,7 +22,7 @@ import hashlib
 import secrets
 
 # ============ Configuration ============
-API_KEY = "sk-geminixxxxx"
+API_KEY = "sk-gemini"
 HOST = "0.0.0.0"
 PORT = 8000
 CONFIG_FILE = "config_data.json"
@@ -406,7 +406,7 @@ def get_client():
         cookies_str=cookies,
         push_id=_config.get("PUSH_ID") or None,
         model_ids=_config.get("MODEL_IDS") or DEFAULT_MODEL_IDS,
-        debug=False,
+        debug=True,
         media_base_url=media_base_url,
     )
     return _client
@@ -1109,7 +1109,7 @@ def log_api_call(request_data: dict, response_data: dict, error: str = None):
         "error": error
     }
     try:
-        with open("api_logs.json", "a", encoding="utf-8") as f:
+        with open("log_api.log", "a", encoding="utf-8") as f:
             f.write(json.dumps(log_entry, ensure_ascii=False, indent=2) + "\n---\n")
     except Exception as e:
         print(f"[LOG ERROR] 写入日志失败: {e}")
@@ -1208,7 +1208,7 @@ def extract_last_user_message(messages: list) -> list:
     return [to_dict(m) for m in messages]
 
 
-def should_reset_session(client) -> bool:
+def should_reset_session(client, request: ChatCompletionRequest) -> bool:
     """
     Determine if we should reset the Gemini session.
     Only reset on timeout or if there's no active session.
@@ -1216,7 +1216,20 @@ def should_reset_session(client) -> bool:
     global _last_request_time
     
     current_time = time.time()
-    
+
+
+
+    # if there aren't any messages role 'assistant', 'tool', or 'function', reset session
+    for m in request.messages:
+        role = m.role if hasattr(m, 'role') else m.get('role', '')
+        if role in ('assistant', 'tool', 'function'):
+            break
+    else:
+        # No assistant, tool, or function messages found, reset session
+        print(f"[SESSION] No assistant/tool/function messages found, resetting session")
+        return True
+
+
     # If timeout passed, reset
     if _last_request_time > 0 and (current_time - _last_request_time) > SESSION_TIMEOUT_SECONDS:
         print(f"[SESSION] Timeout of {SESSION_TIMEOUT_SECONDS}s reached, resetting session")
@@ -1231,9 +1244,18 @@ def should_reset_session(client) -> bool:
 
 @app.post("/v1/chat/completions")
 async def chat_completions(request: ChatCompletionRequest, authorization: str = Header(None)):
+
+    print(f"\n")
+
     global _last_request_time
     verify_api_key(authorization)
     
+
+    # debug raw request and all headers into a file log 
+    with open("log_raw_requests.log", "a", encoding="utf-8") as log_file:
+        log_file.write(json.dumps(request.model_dump(), ensure_ascii=False, indent=2))
+        log_file.write("\n---\n")
+
     # Log request parameters (truncate image content)
     request_log = {
         "model": request.model,
@@ -1262,9 +1284,9 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
     
     try:
         client = get_client()
-        
+
         # Check if we need to reset
-        needs_reset = should_reset_session(client)
+        needs_reset = should_reset_session(client, request)
         
         # Detect if it's a tool call continuation
         # IMPORTANT: Only continuation if LAST message is tool/function
@@ -1303,6 +1325,12 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
                         messages[i]["content"] = tools_prompt + original
                     break
         
+
+        # dump messages to logs_messages.log for debugging
+        with open("logs_messages.log", "a", encoding="utf-8") as msg_log_file:
+            msg_log_file.write(json.dumps(messages, ensure_ascii=False, indent=2))
+            msg_log_file.write("\n---\n")
+
         response = client.chat(messages=messages, model=request.model)
         
         reply_content = response.choices[0].message.content
