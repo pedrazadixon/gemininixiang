@@ -1153,10 +1153,11 @@ class GeminiClient:
             
                 if self.debug:
                     print(f"[DEBUG] Response status: {resp.status_code}")
-                    print(f"[DEBUG] Response content first 500 characters: {resp.text[:500]}")
+                    # print(f"[DEBUG] Response content first 500 characters: {resp.text[:500]}")
                     # Always save full response for debugging
-                    with open("logs_debug_image_response.txt", "w", encoding="utf-8") as f:
+                    with open("logs_debug_image_response.txt", "a", encoding="utf-8") as f:
                         f.write(resp.text)
+                        f.write("\n---\n")
                     print(f"[DEBUG] Full response saved to logs_debug_image_response.txt")
                 
                 # Log full Gemini response

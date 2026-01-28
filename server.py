@@ -406,7 +406,7 @@ def get_client():
         cookies_str=cookies,
         push_id=_config.get("PUSH_ID") or None,
         model_ids=_config.get("MODEL_IDS") or DEFAULT_MODEL_IDS,
-        debug=False,
+        debug=True,
         media_base_url=media_base_url,
     )
     return _client
