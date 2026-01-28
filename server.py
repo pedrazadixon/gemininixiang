@@ -9,7 +9,7 @@ API:   http://localhost:8000/v1
 from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List, Dict, Any, Optional, Union
 import uvicorn
 import time
@@ -1015,14 +1015,13 @@ class ToolCall(BaseModel):
     function: ToolCallFunction
 
 class ChatMessage(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
     role: str
     content: Optional[Union[str, List[Dict[str, Any]]]] = None  # Optional for assistant messages with tool_calls
     name: Optional[str] = None
     tool_call_id: Optional[str] = None  # Required for tool results from opencode
     tool_calls: Optional[List[ToolCall]] = None  # For assistant messages that invoke tools
-    
-    class Config:
-        extra = "ignore"
 
 
 class FunctionDefinition(BaseModel):
@@ -1035,6 +1034,8 @@ class ToolDefinition(BaseModel):
     function: FunctionDefinition
 
 class ChatCompletionRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
     model: str = "gemini"
     messages: List[ChatMessage]
     stream: Optional[bool] = False
@@ -1050,9 +1051,6 @@ class ChatCompletionRequest(BaseModel):
     stop: Optional[Union[str, List[str]]] = None
     n: Optional[int] = None
     user: Optional[str] = None
-    
-    class Config:
-        extra = "ignore"  # Ignore undefined extra fields
 
 
 class ChatCompletionChoice(BaseModel):
