@@ -1,9 +1,9 @@
 """
-Gemini OpenAI 兼容 API 服务
+Gemini OpenAI Compatible API Service
 
-启动: python server.py
-后台: http://localhost:8000/admin
-API:  http://localhost:8000/v1
+Start: python server.py
+Admin: http://localhost:8000/admin
+API:   http://localhost:8000/v1
 """
 
 from fastapi import FastAPI, HTTPException, Header, Request
@@ -21,15 +21,15 @@ import httpx
 import hashlib
 import secrets
 
-# ============ 配置 ============
+# ============ Configuration ============
 API_KEY = "sk-geminixxxxx"
 HOST = "0.0.0.0"
 PORT = 8000
 CONFIG_FILE = "config_data.json"
-# 后台登录账号密码
+# Admin login credentials
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = "admin123"
-# ==============================
+# ========================================
 
 app = FastAPI(title="Gemini OpenAI API", version="1.0.0")
 
@@ -41,38 +41,38 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 静态文件路由 (用于示例图片)
+# Static file routes (for sample images)
 from fastapi.responses import FileResponse
 
-# 生成的媒体文件缓存目录
+# Generated media file cache directory
 MEDIA_CACHE_DIR = os.path.join(os.path.dirname(__file__), "media_cache")
 os.makedirs(MEDIA_CACHE_DIR, exist_ok=True)
 
 @app.get("/static/{filename}")
 async def serve_static(filename: str):
-    """提供静态文件（示例图片等）"""
+    """Serve static files (sample images, etc.)"""
     file_path = os.path.join(os.path.dirname(__file__), filename)
     if os.path.exists(file_path):
         return FileResponse(file_path)
-    raise HTTPException(status_code=404, detail="文件不存在")
+    raise HTTPException(status_code=404, detail="File not found")
 
 @app.get("/media/{media_id}")
 async def serve_media(media_id: str):
-    """提供缓存的媒体文件"""
-    # 安全检查：只允许字母数字和下划线
+    """Serve cached media files"""
+    # Security check: only allow alphanumeric and underscores
     if not media_id.replace("_", "").replace("-", "").isalnum():
-        raise HTTPException(status_code=400, detail="无效的媒体 ID")
+        raise HTTPException(status_code=400, detail="Invalid media ID")
     
-    # 查找匹配的文件
+    # Find matching file
     for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4"]:
         file_path = os.path.join(MEDIA_CACHE_DIR, media_id + ext)
         if os.path.exists(file_path):
             return FileResponse(file_path)
     
-    raise HTTPException(status_code=404, detail="媒体文件不存在")
+    raise HTTPException(status_code=404, detail="Media file not found")
 
 def cleanup_old_media(max_age_hours: int = 1):
-    """清理过期的媒体缓存文件"""
+    """Clean up expired media cache files"""
     import time
     now = time.time()
     max_age_seconds = max_age_hours * 3600
@@ -91,27 +91,27 @@ def cleanup_old_media(max_age_hours: int = 1):
 _admin_sessions = set()
 
 def generate_session_token():
-    """生成随机 session token"""
+    """Generate random session token"""
     return secrets.token_hex(32)
 
 def verify_admin_session(request: Request):
-    """验证管理员 session"""
+    """Verify admin session"""
     token = request.cookies.get("admin_session")
     if not token or token not in _admin_sessions:
         return False
     return True
 
-# 默认可用模型列表 (Gemini 3 官网三个模型: 快速/思考/Pro)
+# Default available models list (Gemini 3 official three models: Flash/Thinking/Pro)
 DEFAULT_MODELS = ["gemini-3.0-flash", "gemini-3.0-flash-thinking", "gemini-3.0-pro"]
 
-# 默认模型 ID (用于请求头选择模型)
+# Default model IDs (used for request header model selection)
 DEFAULT_MODEL_IDS = {
     "flash": "56fdd199312815e2",
     "pro": "e6fa609c3fa255c0", 
     "thinking": "e051ce1aa80aa576",
 }
 
-# 配置存储
+# Configuration storage
 _config = {
     "SNLM0E": "",
     "SECURE_1PSID": "",
@@ -122,12 +122,12 @@ _config = {
     "SSID": "",
     "APISID": "",
     "PUSH_ID": "",
-    "FULL_COOKIE": "",  # 存储完整cookie字符串
-    "MODELS": DEFAULT_MODELS.copy(),  # 可用模型列表
-    "MODEL_IDS": DEFAULT_MODEL_IDS.copy(),  # 模型 ID 映射
+    "FULL_COOKIE": "",  # Store complete cookie string
+    "MODELS": DEFAULT_MODELS.copy(),  # Available models list
+    "MODEL_IDS": DEFAULT_MODEL_IDS.copy(),  # Model ID mapping
 }
 
-# Cookie 字段映射 (浏览器cookie名 -> 配置字段名)
+# Cookie field mapping (browser cookie name -> config field name)
 COOKIE_FIELD_MAP = {
     "__Secure-1PSID": "SECURE_1PSID",
     "__Secure-1PSIDTS": "SECURE_1PSIDTS",
@@ -141,7 +141,7 @@ COOKIE_FIELD_MAP = {
 
 
 def parse_cookie_string(cookie_str: str) -> dict:
-    """解析完整cookie字符串，提取所需字段"""
+    """Parse complete cookie string and extract required fields"""
     result = {}
     if not cookie_str:
         return result
@@ -159,7 +159,7 @@ def parse_cookie_string(cookie_str: str) -> dict:
 
 
 def fetch_tokens_from_page(cookies_str: str) -> dict:
-    """从 Gemini 页面自动获取 SNLM0E、PUSH_ID 和可用模型列表"""
+    """Automatically fetch SNLM0E, PUSH_ID and available models list from Gemini page"""
     result = {"snlm0e": "", "push_id": "", "models": []}
     try:
         session = httpx.Client(
@@ -211,34 +211,34 @@ def fetch_tokens_from_page(cookies_str: str) -> dict:
                 result["push_id"] = matches[0]
                 break
         
-        # 获取可用模型列表 (从页面中提取 gemini 模型 ID)
+        # Get available models list (extract gemini model IDs from page)
         model_patterns = [
-            r'"(gemini-[a-z0-9\.\-]+)"',  # 匹配 "gemini-xxx" 格式
-            r"'(gemini-[a-z0-9\.\-]+)'",  # 匹配 'gemini-xxx' 格式
+            r'"(gemini-[a-z0-9\.\-]+)"',  # Match "gemini-xxx" format
+            r"'(gemini-[a-z0-9\.\-]+)'",  # Match 'gemini-xxx' format
         ]
         models_found = set()
         for pattern in model_patterns:
             matches = re.findall(pattern, html, re.IGNORECASE)
             for m in matches:
-                # 过滤有效的模型名称
+                # Filter valid model names
                 if any(x in m.lower() for x in ['flash', 'pro', 'ultra', 'nano']):
                     models_found.add(m)
         
         if models_found:
             result["models"] = sorted(list(models_found))
         
-        # 获取模型 ID (用于 x-goog-ext-525001261-jspb 请求头)
-        # 这些 ID 用于选择不同的模型版本
+        # Get model IDs (for x-goog-ext-525001261-jspb request header)
+        # These IDs are used to select different model versions
         model_id_pattern = r'\["([a-f0-9]{16})","gemini[^"]*(?:flash|pro|thinking)[^"]*"\]'
         model_ids = re.findall(model_id_pattern, html, re.IGNORECASE)
         if model_ids:
             result["model_ids"] = list(set(model_ids))
         
-        # 备用方案：直接搜索 16 位十六进制 ID（在模型配置附近）
+        # Fallback: directly search for 16-digit hex IDs (near model configuration)
         if not result.get("model_ids"):
-            # 搜索类似 "56fdd199312815e2" 的模式
+            # Search for patterns like "56fdd199312815e2"
             hex_id_pattern = r'"([a-f0-9]{16})"'
-            # 在包含 gemini 或 model 的上下文中查找
+            # Search within context containing gemini or model
             context_pattern = r'.{0,100}(?:gemini|model|flash|pro|thinking).{0,100}'
             contexts = re.findall(context_pattern, html, re.IGNORECASE)
             hex_ids = set()
@@ -255,9 +255,9 @@ def fetch_tokens_from_page(cookies_str: str) -> dict:
 _client = None
 
 
-# ============ Tools 支持 ============
+# ============ Tools Support ============
 def build_tools_prompt(tools: List[Dict]) -> str:
-    """将 tools 定义转换为提示词"""
+    """Convert tools definition to prompt"""
     if not tools:
         return ""
     
@@ -287,15 +287,15 @@ User request: """
 
 def parse_tool_calls(content: str) -> tuple:
     """
-    解析响应中的工具调用
-    返回: (tool_calls列表, 剩余文本内容)
+    Parse tool calls in response
+    Returns: (list of tool_calls, remaining text content)
     """
     tool_calls = []
     
-    # 多种匹配模式
+    # Multiple matching patterns
     patterns = [
         r'```tool_call\s*\n?(.*?)\n?```',  # ```tool_call ... ```
-        r'```json\s*\n?(.*?)\n?```',        # ```json ... ``` (有时模型会用这个)
+        r'```json\s*\n?(.*?)\n?```',        # ```json ... ``` (sometimes models use this)
         r'```\s*\n?(\{[^`]*"name"[^`]*\})\n?```',  # ``` {...} ```
     ]
     
@@ -304,7 +304,7 @@ def parse_tool_calls(content: str) -> tuple:
         found = re.findall(pattern, content, re.DOTALL)
         matches.extend(found)
     
-    # 也尝试直接匹配 JSON 对象（没有代码块包裹的情况）
+    # Also try to match JSON objects directly (without code block wrapper)
     if not matches:
         json_pattern = r'\{[^{}]*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[^{}]*\}[^{}]*\}'
         matches = re.findall(json_pattern, content, re.DOTALL)
@@ -312,7 +312,7 @@ def parse_tool_calls(content: str) -> tuple:
     for i, match in enumerate(matches):
         try:
             match = match.strip()
-            # 尝试解析 JSON
+            # Try to parse JSON
             call_data = json.loads(match)
             if call_data.get("name"):
                 tool_calls.append({
@@ -327,7 +327,7 @@ def parse_tool_calls(content: str) -> tuple:
         except json.JSONDecodeError:
             continue
     
-    # 移除工具调用部分
+    # Remove tool call sections
     remaining = content
     for pattern in patterns:
         remaining = re.sub(pattern, '', remaining, flags=re.DOTALL)
@@ -338,14 +338,14 @@ def parse_tool_calls(content: str) -> tuple:
 
 def load_config():
     """
-    加载配置，优先级:
-    1. config_data.json (前端保存的配置)
-    2. config.py (本地开发配置，仅作为备用)
+    Load configuration, priority:
+    1. config_data.json (frontend saved configuration)
+    2. config.py (local development configuration, as fallback only)
     """
     global _config
     loaded_from_json = False
     
-    # 优先从 JSON 文件加载
+    # Load from JSON file first
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -356,7 +356,7 @@ def load_config():
         except:
             pass
     
-    # 如果 JSON 没有有效配置，尝试从 config.py 加载
+    # If JSON has no valid config, try loading from config.py
     if not loaded_from_json:
         try:
             import config
@@ -376,9 +376,9 @@ def get_client():
     global _client
     
     if not _config.get("SNLM0E") or not _config.get("SECURE_1PSID"):
-        raise HTTPException(status_code=500, detail="请先在后台配置 Token 和 Cookie")
+        raise HTTPException(status_code=500, detail="Please configure Token and Cookie in admin panel first")
     
-    # 如果 client 已存在，直接复用，保持会话上下文
+    # If client already exists, reuse it to maintain session context
     if _client is not None:
         return _client
     
@@ -396,7 +396,7 @@ def get_client():
     if _config.get("APISID"):
         cookies += f"; APISID={_config['APISID']}"
     
-    # 构建媒体文件的基础 URL
+    # Build base URL for media files
     media_base_url = f"http://localhost:{PORT}"
     
     from client import GeminiClient
@@ -418,7 +418,7 @@ def get_login_html():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 - Gemini API</title>
+    <title>Login - Gemini API</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -443,20 +443,20 @@ def get_login_html():
     <div class="login-card">
         <div class="logo">🤖</div>
         <h1>Gemini API</h1>
-        <p class="subtitle">请登录以访问后台管理</p>
+        <p class="subtitle">Please login to access admin panel</p>
         
         <div id="error" class="error"></div>
         
         <form id="loginForm">
             <div class="form-group">
-                <label>用户名</label>
-                <input type="text" name="username" id="username" placeholder="请输入用户名" required autofocus>
+                <label>Username</label>
+                <input type="text" name="username" id="username" placeholder="Enter username" required autofocus>
             </div>
             <div class="form-group">
-                <label>密码</label>
-                <input type="password" name="password" id="password" placeholder="请输入密码" required>
+                <label>Password</label>
+                <input type="password" name="password" id="password" placeholder="Enter password" required>
             </div>
-            <button type="submit" class="btn" id="submitBtn">登 录</button>
+            <button type="submit" class="btn" id="submitBtn">Login</button>
         </form>
     </div>
     
@@ -506,7 +506,7 @@ def get_admin_html():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gemini API 配置</title>
+    <title>Gemini API Configuration</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -544,82 +544,82 @@ def get_admin_html():
 <body>
     <div class="container">
         <div class="card">
-            <h1>🤖 Gemini API 配置</h1>
-            <p class="subtitle">配置 Google Gemini 的认证信息，保存后即可调用 API <a href="/admin/logout" style="float:right;color:#667eea;text-decoration:none;">退出登录</a></p>
+            <h1>🤖 Gemini API Configuration</h1>
+            <p class="subtitle">Configure Google Gemini authentication, API ready after saving <a href="/admin/logout" style="float:right;color:#667eea;text-decoration:none;">Logout</a></p>
             
             <div class="info-box">
-                <strong>获取方法：</strong><br>
-                1. 打开 <a href="https://gemini.google.com" target="_blank">gemini.google.com</a> 并登录<br>
-                2. F12 → 网络 → 发送内容到聊天 →  点击任意请求 → Copy 请求头内完整cookie
+                <strong>How to get:</strong><br>
+                1. Open <a href="https://gemini.google.com" target="_blank">gemini.google.com</a> and login<br>
+                2. F12 → Network → Send message to chat → Click any request → Copy complete cookie from request headers
             </div>
             
             <form id="configForm">
                 <div class="section">
-                    <div class="section-title">🔑 Cookie 配置</div>
+                    <div class="section-title">🔑 Cookie Configuration</div>
                     <div class="form-group">
-                        <label>完整 Cookie <span class="required">*</span></label>
-                        <textarea name="FULL_COOKIE" id="FULL_COOKIE" rows="6" placeholder="粘贴从浏览器复制的完整 Cookie 字符串，系统会自动解析所需字段和 Token..." required></textarea>
+                        <label>Complete Cookie <span class="required">*</span></label>
+                        <textarea name="FULL_COOKIE" id="FULL_COOKIE" rows="6" placeholder="Paste complete Cookie string copied from browser, system will auto-parse required fields and Token..." required></textarea>
                         <div id="parsedInfo" class="parsed-info">
-                            <h4>✅ 已解析的字段：</h4>
+                            <h4>✅ Parsed fields:</h4>
                             <div id="parsedFields"></div>
                         </div>
                     </div>
                 </div>
                 
                 <div class="section">
-                    <div class="section-title">🎯 模型 ID 配置 <span class="optional">(可选，如果模型切换失效请更新)</span></div>
+                    <div class="section-title">🎯 Model ID Configuration <span class="optional">(Optional, update if model switching fails)</span></div>
                     <div class="info-box">
-                        <strong>获取方法：</strong>F12 → Network → 在 Gemini 中切换模型发送消息 → 找到请求头 <code>x-goog-ext-525001261-jspb</code> → 复制整个数组值粘贴到下方输入框
+                        <strong>How to get:</strong> F12 → Network → Switch model in Gemini and send message → Find request header <code>x-goog-ext-525001261-jspb</code> → Copy entire array value and paste below
                     </div>
                     <div class="form-group">
-                        <label>快速解析 <span class="optional">(粘贴请求头数组自动提取 ID)</span></label>
-                        <input type="text" id="MODEL_ID_PARSER" placeholder='粘贴如: [1,null,null,null,"56fdd199312815e2",null,null,0,[4],null,null,2]'>
+                        <label>Quick Parse <span class="optional">(Paste request header array to auto-extract ID)</span></label>
+                        <input type="text" id="MODEL_ID_PARSER" placeholder='Paste like: [1,null,null,null,"56fdd199312815e2",null,null,0,[4],null,null,2]'>
                         <div id="parsedModelId" class="parsed-info" style="margin-top:10px;">
-                            <h4>✅ 已提取的模型 ID：</h4>
+                            <h4>✅ Extracted Model ID:</h4>
                             <div id="parsedModelIdValue"></div>
                         </div>
                     </div>
                     <div class="form-group">
-                        <label>极速版 (Flash) ID</label>
+                        <label>Flash Version ID</label>
                         <input type="text" name="MODEL_ID_FLASH" id="MODEL_ID_FLASH" placeholder="56fdd199312815e2">
                     </div>
                     <div class="form-group">
-                        <label>Pro 版 ID</label>
+                        <label>Pro Version ID</label>
                         <input type="text" name="MODEL_ID_PRO" id="MODEL_ID_PRO" placeholder="e6fa609c3fa255c0">
                     </div>
                     <div class="form-group">
-                        <label>思考版 (Thinking) ID</label>
+                        <label>Thinking Version ID</label>
                         <input type="text" name="MODEL_ID_THINKING" id="MODEL_ID_THINKING" placeholder="e051ce1aa80aa576">
                     </div>
                 </div>
                 
-                <button type="submit" class="btn">💾 保存配置</button>
+                <button type="submit" class="btn">💾 Save Configuration</button>
             </form>
             
             <div id="status" class="status"></div>
             
             <div class="api-info">
-                <h3>📡 API 调用信息</h3>
+                <h3>📡 API Call Information</h3>
                 <p>Base URL: <strong id="baseUrl"></strong></p>
                 <p>API Key: <strong id="apiKey"></strong></p>
-                <p>可用模型: <code>gemini-3.0-flash</code> | <code>gemini-3.0-pro</code> | <code>gemini-3.0-flash-thinking</code></p>
+                <p>Available models: <code>gemini-3.0-flash</code> | <code>gemini-3.0-pro</code> | <code>gemini-3.0-flash-thinking</code></p>
                 
-                <h4 style="margin-top:15px;">💬 文本对话</h4>
+                <h4 style="margin-top:15px;">💬 Text Chat</h4>
 <pre>from openai import OpenAI
 client = OpenAI(base_url="<span id="codeUrl"></span>", api_key="<span id="codeKey"></span>")
 
 response = client.chat.completions.create(
-    model="gemini-3.0-flash",  # 或 gemini-3.0-pro / gemini-3.0-flash-thinking
-    messages=[{"role": "user", "content": "你好"}]
+    model="gemini-3.0-flash",  # or gemini-3.0-pro / gemini-3.0-flash-thinking
+    messages=[{"role": "user", "content": "Hello"}]
 )
 print(response.choices[0].message.content)</pre>
 
-                <h4 style="margin-top:15px;">🖼️ 图片识别</h4>
+                <h4 style="margin-top:15px;">🖼️ Image Recognition</h4>
 <pre>import base64
 from openai import OpenAI
 client = OpenAI(base_url="<span id="codeUrl2"></span>", api_key="<span id="codeKey2"></span>")
 
-# 读取本地图片
+# Read local image
 with open("image.png", "rb") as f:
     img_b64 = base64.b64encode(f.read()).decode()
 
@@ -628,39 +628,39 @@ response = client.chat.completions.create(
     messages=[{
         "role": "user",
         "content": [
-            {"type": "text", "text": "请描述这张图片"},
+            {"type": "text", "text": "Please describe this image"},
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_b64}"}}
         ]
     }]
 )
 print(response.choices[0].message.content)</pre>
 
-                <h4 style="margin-top:15px;">🌊 流式响应</h4>
+                <h4 style="margin-top:15px;">🌊 Streaming Response</h4>
 <pre>stream = client.chat.completions.create(
     model="gemini-3.0-flash",
-    messages=[{"role": "user", "content": "写一首诗"}],
+    messages=[{"role": "user", "content": "Write a poem"}],
     stream=True
 )
 for chunk in stream:
     if chunk.choices[0].delta.content:
         print(chunk.choices[0].delta.content, end="", flush=True)</pre>
 
-                <h4 style="margin-top:15px;">📷 示例图片</h4>
-                <p style="font-size:12px;color:#666;">以下是 image.png 示例图片，可用于测试图片识别功能（点击放大）：</p>
-                <img id="sampleImage" src="/static/image.png" alt="示例图片" style="max-width:300px;border-radius:8px;margin-top:10px;border:1px solid #ddd;cursor:pointer;" onclick="showImageModal()" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
-                <p style="display:none;font-size:12px;color:#999;">（示例图片不可用，请确保 image.png 文件存在）</p>
+                <h4 style="margin-top:15px;">📷 Sample Image</h4>
+                <p style="font-size:12px;color:#666;">Below is image.png sample image, can be used to test image recognition (click to enlarge):</p>
+                <img id="sampleImage" src="/static/image.png" alt="Sample Image" style="max-width:300px;border-radius:8px;margin-top:10px;border:1px solid #ddd;cursor:pointer;" onclick="showImageModal()" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
+                <p style="display:none;font-size:12px;color:#999;">(Sample image unavailable, please ensure image.png file exists)</p>
             </div>
         </div>
     </div>
     
     <!-- 图片放大模态框 -->
     <div id="imageModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:1000;justify-content:center;align-items:center;cursor:pointer;" onclick="hideImageModal()">
-        <img src="/static/image.png" alt="示例图片" style="max-width:90%;max-height:90%;border-radius:8px;box-shadow:0 0 30px rgba(0,0,0,0.5);">
+        <img src="/static/image.png" alt="Sample Image" style="max-width:90%;max-height:90%;border-radius:8px;box-shadow:0 0 30px rgba(0,0,0,0.5);">
         <span style="position:absolute;top:20px;right:30px;color:white;font-size:30px;cursor:pointer;">&times;</span>
     </div>
     
     <script>
-        // 图片放大功能
+        // Image zoom functionality
         function showImageModal() {
             document.getElementById('imageModal').style.display = 'flex';
             document.body.style.overflow = 'hidden';
@@ -669,7 +669,7 @@ for chunk in stream:
             document.getElementById('imageModal').style.display = 'none';
             document.body.style.overflow = 'auto';
         }
-        // ESC 键关闭
+        // Close with ESC key
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') hideImageModal();
         });
@@ -693,7 +693,7 @@ for chunk in stream:
                     return arr[4];
                 }
             } catch (e) {
-                // 尝试用正则提取 16 位十六进制字符串
+                // Try to extract 16-digit hex string with regex
                 const match = input.match(/["\']([a-f0-9]{16})["\']/i);
                 if (match) {
                     return match[1];
@@ -702,7 +702,7 @@ for chunk in stream:
             return null;
         }
         
-        // 监听模型 ID 解析输入
+        // Listen to model ID parser input
         document.getElementById('MODEL_ID_PARSER').addEventListener('input', (e) => {
             const modelId = parseModelId(e.target.value);
             const container = document.getElementById('parsedModelIdValue');
@@ -721,7 +721,7 @@ for chunk in stream:
             }
         });
         
-        // 填入模型 ID
+        // Fill model ID
         function fillModelId(type, id) {
             const fieldMap = {
                 'flash': 'MODEL_ID_FLASH',
@@ -731,7 +731,7 @@ for chunk in stream:
             document.getElementById(fieldMap[type]).value = id;
         }
         
-        // Cookie 字段映射
+        // Cookie field mapping
         const cookieFields = {
             '__Secure-1PSID': 'SECURE_1PSID',
             '__Secure-1PSIDTS': 'SECURE_1PSIDTS',
@@ -743,7 +743,7 @@ for chunk in stream:
             'APISID': 'APISID'
         };
         
-        // 解析 Cookie 字符串
+        // Parse Cookie string
         function parseCookie(cookieStr) {
             const result = {};
             if (!cookieStr) return result;
@@ -762,7 +762,7 @@ for chunk in stream:
             return result;
         }
         
-        // 显示解析结果
+        // Display parsed results
         function showParsedFields(parsed) {
             const container = document.getElementById('parsedFields');
             const infoBox = document.getElementById('parsedInfo');
@@ -795,13 +795,13 @@ for chunk in stream:
             }
         }
         
-        // 监听 Cookie 输入
+        // Listen to Cookie input
         document.getElementById('FULL_COOKIE').addEventListener('input', (e) => {
             const parsed = parseCookie(e.target.value);
             showParsedFields(parsed);
         });
         
-        // 加载配置
+        // Load configuration
         fetch('/admin/config', {credentials: 'same-origin'}).then(r => {
             if (!r.ok) throw new Error('未登录');
             return r.json();
@@ -810,14 +810,14 @@ for chunk in stream:
                 document.getElementById('FULL_COOKIE').value = config.FULL_COOKIE;
                 showParsedFields(parseCookie(config.FULL_COOKIE));
             }
-            // 加载模型 ID
+            // Load model IDs
             if (config.MODEL_IDS) {
                 document.getElementById('MODEL_ID_FLASH').value = config.MODEL_IDS.flash || '';
                 document.getElementById('MODEL_ID_PRO').value = config.MODEL_IDS.pro || '';
                 document.getElementById('MODEL_ID_THINKING').value = config.MODEL_IDS.thinking || '';
             }
         }).catch(err => {
-            console.log('加载配置失败:', err);
+            console.log('Failed to load configuration:', err);
         });
         
         document.getElementById('configForm').addEventListener('submit', async (e) => {
@@ -825,7 +825,7 @@ for chunk in stream:
             const formData = new FormData(e.target);
             const data = Object.fromEntries(formData.entries());
             
-            // 构建模型 ID 对象
+            // Build model IDs object
             data.MODEL_IDS = {
                 flash: data.MODEL_ID_FLASH || '',
                 pro: data.MODEL_ID_PRO || '',
@@ -840,10 +840,10 @@ for chunk in stream:
             statusEl.style.display = 'none';
             statusEl.textContent = '';
             
-            // 显示保存中状态
+            // Display saving status
             const submitBtn = e.target.querySelector('button[type="submit"]');
             const originalText = submitBtn.textContent;
-            submitBtn.textContent = '⏳ 保存中...';
+            submitBtn.textContent = '⏳ Saving...';
             submitBtn.disabled = true;
             
             try {
@@ -863,7 +863,7 @@ for chunk in stream:
                 
                 if (result.success) {
                     statusEl.className = 'status success';
-                    statusEl.innerHTML = '✅ ' + result.message + '<br><br>💡 <strong>配置已生效，无需重启服务！</strong>';
+                    statusEl.innerHTML = '✅ ' + result.message + '<br><br>💡 <strong>Configuration applied, no need to restart service!</strong>';
                 } else {
                     statusEl.className = 'status error';
                     statusEl.textContent = '❌ ' + result.message;
@@ -871,7 +871,7 @@ for chunk in stream:
                 statusEl.style.display = 'block';
             } catch (err) {
                 statusEl.className = 'status error';
-                statusEl.textContent = '❌ 保存失败: ' + err.message;
+                statusEl.textContent = '❌ Save failed: ' + err.message;
                 statusEl.style.display = 'block';
             } finally {
                 submitBtn.textContent = originalText;
@@ -897,11 +897,11 @@ async def admin_login(request: Request):
     if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
         token = generate_session_token()
         _admin_sessions.add(token)
-        response = JSONResponse({"success": True, "message": "登录成功"})
+        response = JSONResponse({"success": True, "message": "Login successful"})
         response.set_cookie(key="admin_session", value=token, httponly=True, max_age=86400)
         return response
     else:
-        return {"success": False, "message": "用户名或密码错误"}
+        return {"success": False, "message": "Invalid username or password"}
 
 
 @app.get("/admin/logout")
@@ -924,47 +924,47 @@ async def admin_page(request: Request):
 @app.post("/admin/save")
 async def admin_save(request: Request):
     if not verify_admin_session(request):
-        raise HTTPException(status_code=401, detail="未登录")
+        raise HTTPException(status_code=401, detail="Not logged in")
     
     global _client
     data = await request.json()
     
-    # 处理完整 Cookie 字符串，去除前后空格
+    # Process complete Cookie string, remove leading/trailing spaces
     full_cookie = data.get("FULL_COOKIE", "").strip()
     if not full_cookie:
-        return {"success": False, "message": "Cookie 是必填项"}
+        return {"success": False, "message": "Cookie is required"}
     
-    # 解析 Cookie 字符串
+    # Parse Cookie string
     parsed = parse_cookie_string(full_cookie)
     
     if not parsed.get("SECURE_1PSID"):
-        return {"success": False, "message": "Cookie 中未找到 __Secure-1PSID 字段，请确保复制了完整的 Cookie"}
+        return {"success": False, "message": "__Secure-1PSID field not found in Cookie, please ensure you copied the complete Cookie"}
     
-    # 从页面自动获取 SNLM0E 和 PUSH_ID
+    # Automatically fetch SNLM0E and PUSH_ID from page
     tokens = fetch_tokens_from_page(full_cookie)
     
     if not tokens.get("snlm0e"):
-        return {"success": False, "message": "无法自动获取 AT Token，请检查 Cookie 是否有效或已过期"}
+        return {"success": False, "message": "Unable to automatically fetch AT Token, please check if Cookie is valid or expired"}
     
-    # 更新配置
+    # Update configuration
     _config["FULL_COOKIE"] = full_cookie
     _config["SNLM0E"] = tokens["snlm0e"]
     _config["PUSH_ID"] = tokens.get("push_id", "")
     
-    # 从解析结果更新各字段
+    # Update fields from parsed results
     for field in ["SECURE_1PSID", "SECURE_1PSIDTS", "SAPISID", "SID", "HSID", "SSID", "APISID"]:
         _config[field] = parsed.get(field, "")
     
-    # 使用自动获取的模型列表，如果获取失败则使用默认值
+    # Use automatically fetched models list, use default if fetch fails
     if tokens.get("models"):
         _config["MODELS"] = tokens["models"]
     else:
         _config["MODELS"] = DEFAULT_MODELS.copy()
     
-    # 处理模型 ID 配置
+    # Process model IDs configuration
     model_ids = data.get("MODEL_IDS", {})
     if model_ids:
-        # 只更新非空的值
+        # Only update non-empty values
         if model_ids.get("flash"):
             _config["MODEL_IDS"]["flash"] = model_ids["flash"]
         if model_ids.get("pro"):
@@ -975,22 +975,22 @@ async def admin_save(request: Request):
     save_config()
     _client = None
     
-    # 构建结果信息
+    # Build result information
     parsed_fields = [k for k in ["SECURE_1PSID", "SECURE_1PSIDTS", "SAPISID", "SID", "HSID", "SSID", "APISID"] if parsed.get(k)]
-    push_id_msg = f"，PUSH_ID ✓" if tokens.get("push_id") else "，PUSH_ID ✗ (图片功能不可用)"
-    models_msg = f"，{len(_config['MODELS'])} 个模型" if _config.get("MODELS") else ""
+    push_id_msg = f", PUSH_ID ✓" if tokens.get("push_id") else ", PUSH_ID ✗ (Image feature unavailable)"
+    models_msg = f", {len(_config['MODELS'])} models" if _config.get("MODELS") else ""
     
     try:
         get_client()
         return {
             "success": True, 
-            "message": f"配置已保存并验证成功！AT Token ✓{push_id_msg}{models_msg}",
+            "message": f"Configuration saved and verified successfully! AT Token ✓{push_id_msg}{models_msg}",
             "need_restart": False
         }
     except Exception as e:
         return {
             "success": True, 
-            "message": f"配置已保存，但连接测试失败: {str(e)[:50]}",
+            "message": f"Configuration saved, but connection test failed: {str(e)[:50]}",
             "need_restart": False
         }
 
@@ -998,11 +998,11 @@ async def admin_save(request: Request):
 @app.get("/admin/config")
 async def admin_get_config(request: Request):
     if not verify_admin_session(request):
-        raise HTTPException(status_code=401, detail="未登录")
+        raise HTTPException(status_code=401, detail="Not logged in")
     return _config
 
 
-# ============ API 路由 ============
+# ============ API Routes ============
 
 class ToolCallFunction(BaseModel):
     name: str
@@ -1015,10 +1015,10 @@ class ToolCall(BaseModel):
 
 class ChatMessage(BaseModel):
     role: str
-    content: Optional[Union[str, List[Dict[str, Any]]]] = None  # Opcional para mensajes assistant con tool_calls
+    content: Optional[Union[str, List[Dict[str, Any]]]] = None  # Optional for assistant messages with tool_calls
     name: Optional[str] = None
-    tool_call_id: Optional[str] = None  # Necesario para tool results de opencode
-    tool_calls: Optional[List[ToolCall]] = None  # Para mensajes assistant que invocan tools
+    tool_call_id: Optional[str] = None  # Required for tool results from opencode
+    tool_calls: Optional[List[ToolCall]] = None  # For assistant messages that invoke tools
     
     class Config:
         extra = "ignore"
@@ -1037,10 +1037,10 @@ class ChatCompletionRequest(BaseModel):
     model: str = "gemini"
     messages: List[ChatMessage]
     stream: Optional[bool] = False
-    # Tools 支持
+    # Tools support
     tools: Optional[List[ToolDefinition]] = None
     tool_choice: Optional[Union[str, Dict[str, Any]]] = None
-    # OpenAI SDK 可能发送的额外字段
+    # Additional fields that OpenAI SDK may send
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     top_p: Optional[float] = None
@@ -1051,7 +1051,7 @@ class ChatCompletionRequest(BaseModel):
     user: Optional[str] = None
     
     class Config:
-        extra = "ignore"  # 忽略未定义的额外字段
+        extra = "ignore"  # Ignore undefined extra fields
 
 
 class ChatCompletionChoice(BaseModel):
@@ -1100,7 +1100,7 @@ async def list_models(authorization: str = Header(None)):
 
 
 def log_api_call(request_data: dict, response_data: dict, error: str = None):
-    """记录 API 调用日志到文件"""
+    """Log API call to file"""
     import datetime
     log_entry = {
         "timestamp": datetime.datetime.now().isoformat(),
@@ -1115,19 +1115,19 @@ def log_api_call(request_data: dict, response_data: dict, error: str = None):
         print(f"[LOG ERROR] 写入日志失败: {e}")
 
 
-# Sesión simplificada: confiar en el conversation_id de Gemini
+# Simplified session: trust Gemini's conversation_id
 _last_request_time = 0
-SESSION_TIMEOUT_SECONDS = 1800  # 30 minutos de inactividad para resetear
+SESSION_TIMEOUT_SECONDS = 1800  # 30 minutes of inactivity to reset
 
 
 def extract_last_user_message(messages: list) -> list:
     """
-    Extrae los mensajes relevantes para enviar a Gemini.
+    Extract relevant messages to send to Gemini.
     
-    IMPORTANTE para agentes (opencode, etc.):
-    - Primero verificar el ÚLTIMO mensaje para determinar la intención
-    - Si el último mensaje es 'tool'/'function', es continuación de tool call
-    - Si el último mensaje es 'user', es una NUEVA pregunta (ignorar tools antiguos en historial)
+    IMPORTANT for agents (opencode, etc.):
+    - First check the LAST message to determine intent
+    - If last message is 'tool'/'function', it's a tool call continuation
+    - If last message is 'user', it's a NEW question (ignore old tools in history)
     """
     def to_dict(m):
         role = m.role if hasattr(m, 'role') else m.get('role', '')
@@ -1137,8 +1137,8 @@ def extract_last_user_message(messages: list) -> list:
     def get_role(m):
         return m.role if hasattr(m, 'role') else m.get('role', '')
     
-    # DEBUG: Mostrar todos los mensajes recibidos
-    # print(f"[DEBUG] Recibidos {len(messages)} mensajes:")
+    # DEBUG: Show all received messages
+    # print(f"[DEBUG] Received {len(messages)} messages:")
     for i, m in enumerate(messages):
         role = get_role(m)
         content = m.content if hasattr(m, 'content') else m.get('content', '')
@@ -1150,29 +1150,29 @@ def extract_last_user_message(messages: list) -> list:
     if not messages:
         return []
     
-    # CLAVE: Verificar el tipo del ÚLTIMO mensaje para determinar la intención
+    # KEY: Check the LAST message type to determine intent
     last_message = messages[-1]
     last_role = get_role(last_message)
     
-    print(f"[DEBUG] Último mensaje tiene role={last_role}")
+    print(f"[DEBUG] Last message has role={last_role}")
     
-    # Si el último mensaje es de usuario, es una NUEVA pregunta
-    # Ignorar cualquier mensaje tool/function anterior en el historial
+    # If last message is from user, it's a NEW question
+    # Ignore any previous tool/function messages in history
     if last_role == 'user':
-        print(f"[SESSION] Nueva pregunta de usuario detectada (ignorando historial de tools)")
+        print(f"[SESSION] New user question detected (ignoring tools history)")
         return [to_dict(last_message)]
     
-    # Si el último mensaje es tool/function, recolectar SOLO los tool results
-    # que vienen al final (después del último assistant)
+    # If last message is tool/function, collect ONLY the tool results
+    # that come at the end (after the last assistant)
     if last_role in ('tool', 'function'):
-        # Encontrar el índice del último mensaje assistant
+        # Find the index of the last assistant message
         last_assistant_idx = -1
         for i in range(len(messages) - 1, -1, -1):
             if get_role(messages[i]) == 'assistant':
                 last_assistant_idx = i
                 break
         
-        # Recolectar solo los tool results que vienen DESPUÉS del último assistant
+        # Collect only tool results that come AFTER the last assistant
         tool_results = []
         start_idx = last_assistant_idx + 1 if last_assistant_idx >= 0 else 0
         
@@ -1186,10 +1186,10 @@ def extract_last_user_message(messages: list) -> list:
                 tool_name = name or tool_call_id or 'unknown_tool'
                 tool_result = f"[Tool Result for {tool_name}]:\n{content}"
                 tool_results.append(tool_result)
-                print(f"[DEBUG] Encontrado tool result reciente: name={name}, id={tool_call_id}, content_len={len(str(content))}")
+                print(f"[DEBUG] Found recent tool result: name={name}, id={tool_call_id}, content_len={len(str(content))}")
         
         if tool_results:
-            print(f"[SESSION] Enviando {len(tool_results)} tool result(s) recientes a Gemini")
+            print(f"[SESSION] Sending {len(tool_results)} recent tool result(s) to Gemini")
             combined_result = "\n\n".join(tool_results)
             instruction = (
                 "The tool has been executed successfully. Here are the results:\n\n"
@@ -1199,30 +1199,30 @@ def extract_last_user_message(messages: list) -> list:
             )
             return [{"role": "user", "content": instruction}]
     
-    # Fallback: buscar el último mensaje de usuario
+    # Fallback: search for the last user message
     for m in reversed(messages):
         if get_role(m) == 'user':
             return [to_dict(m)]
     
-    # Si no hay mensaje de usuario, devolver todo
+    # If no user message, return all
     return [to_dict(m) for m in messages]
 
 
 def should_reset_session(client) -> bool:
     """
-    Determina si debemos resetear la sesión de Gemini.
-    Solo resetear por timeout o si no hay sesión activa.
+    Determine if we should reset the Gemini session.
+    Only reset on timeout or if there's no active session.
     """
     global _last_request_time
     
     current_time = time.time()
     
-    # Si pasó el timeout, resetear
+    # If timeout passed, reset
     if _last_request_time > 0 and (current_time - _last_request_time) > SESSION_TIMEOUT_SECONDS:
-        print(f"[SESSION] Timeout de {SESSION_TIMEOUT_SECONDS}s alcanzado, reseteando sesión")
+        print(f"[SESSION] Timeout of {SESSION_TIMEOUT_SECONDS}s reached, resetting session")
         return True
     
-    # Si no hay conversation_id, es una nueva sesión de todos modos
+    # If no conversation_id, it's a new session anyway
     if not client.conversation_id:
         return True
     
@@ -1234,7 +1234,7 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
     global _last_request_time
     verify_api_key(authorization)
     
-    # 记录请求入参 (图片内容截断显示)
+    # Log request parameters (truncate image content)
     request_log = {
         "model": request.model,
         "stream": request.stream,
@@ -1263,37 +1263,37 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
     try:
         client = get_client()
         
-        # Verificar si necesitamos resetear
+        # Check if we need to reset
         needs_reset = should_reset_session(client)
         
-        # Detectar si es una continuación de tool call
-        # IMPORTANTE: Solo es continuación si el ÚLTIMO mensaje es tool/function
-        # No si hay mensajes tool antiguos en el historial
+        # Detect if it's a tool call continuation
+        # IMPORTANT: Only continuation if LAST message is tool/function
+        # Not if there are old tool messages in history
         last_msg = request.messages[-1] if request.messages else None
         last_role = (last_msg.role if hasattr(last_msg, 'role') else last_msg.get('role', '')) if last_msg else ''
         is_tool_continuation = last_role in ('tool', 'function')
         
         if needs_reset:
             client.reset()
-            # Nueva sesión: enviar todos los mensajes para establecer contexto
+            # New session: send all messages to establish context
             messages = [{"role": m.role if hasattr(m, 'role') else m.get('role', ''),
                         "content": m.content if hasattr(m, 'content') else m.get('content', '')} 
                        for m in request.messages]
-            print(f"[SESSION] Nueva sesión iniciada. Enviando {len(messages)} mensaje(s) para establecer contexto")
+            print(f"[SESSION] New session started. Sending {len(messages)} message(s) to establish context")
         else:
-            # Sesión existente: extraer mensajes relevantes
+            # Existing session: extract relevant messages
             messages = extract_last_user_message(request.messages)
             if is_tool_continuation:
-                print(f"[SESSION] Continuación de tool call (conv_id: {client.conversation_id[:20]}...). Enviando resultados de tools")
+                print(f"[SESSION] Tool call continuation (conv_id: {client.conversation_id[:20]}...). Sending tool results")
             else:
-                print(f"[SESSION] Sesión activa (conv_id: {client.conversation_id[:20]}...). Enviando solo el último mensaje")
+                print(f"[SESSION] Active session (conv_id: {client.conversation_id[:20]}...). Sending only last message")
         
-        # Actualizar timestamp
+        # Update timestamp
         _last_request_time = time.time()
         
-        # 如果有 tools，把工具提示词直接加到用户消息前面
-        # IMPORTANTE: No agregar tools_prompt en continuaciones de tool calls
-        # porque Gemini ya tiene el contexto de las herramientas disponibles
+        # If there are tools, add tool prompt directly to user message
+        # IMPORTANT: Don't add tools_prompt in tool call continuations
+        # because Gemini already has the context of available tools
         if request.tools and len(messages) > 0 and not is_tool_continuation:
             tools_prompt = build_tools_prompt([t.model_dump() for t in request.tools])
             for i in range(len(messages) - 1, -1, -1):
@@ -1309,13 +1309,13 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
         created_time = int(time.time())
         
-        # 解析工具调用
+        # Parse tool calls
         tool_calls = []
         final_content = reply_content
         if request.tools:
             tool_calls, final_content = parse_tool_calls(reply_content)
         
-        # 处理流式响应
+        # Handle streaming response
         if request.stream:
             async def generate_stream():
                 chunk_data = {
@@ -1332,7 +1332,7 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
                 yield f"data: {json.dumps(chunk_data)}\n\n"
                 
                 if tool_calls:
-                    # 流式返回工具调用
+                    # Stream return tool calls
                     for tc in tool_calls:
                         chunk_data = {
                             "id": completion_id,
@@ -1384,7 +1384,7 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
                 }
             )
         
-        # 构建响应消息
+        # Build response message
         response_message = {"role": "assistant"}
         if tool_calls:
             response_message["content"] = final_content if final_content else None
@@ -1438,9 +1438,9 @@ if __name__ == "__main__":
 ╔══════════════════════════════════════════════════════════╗
 ║           Gemini OpenAI Compatible API Server            ║
 ╠══════════════════════════════════════════════════════════╣
-║  后台配置: http://localhost:{PORT}/admin                   ║
-║  API 地址: http://localhost:{PORT}/v1                      ║
-║  API Key:  {API_KEY}                                     ║
+║  Admin: http://localhost:{PORT}/admin                      ║
+║  API URL: http://localhost:{PORT}/v1                       ║
+║  API Key:  {API_KEY}                                ║
 ╚══════════════════════════════════════════════════════════╝
 """)
     uvicorn.run(app, host=HOST, port=PORT)
