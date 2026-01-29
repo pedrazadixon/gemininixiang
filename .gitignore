@@ -4,3 +4,4 @@ log_api.log
 log_raw_requests.log
 logs_messages.log
 log_responses.log
+gem_mapping.json

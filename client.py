@@ -4,12 +4,14 @@ Supports text and image requests, contextual dialogue, and OpenAI format input/o
 Manual token configuration, no code login required
 """
 
+import os
 import re
 import json
 import random
 import string
 import base64
 import uuid
+import hashlib
 import httpx
 from typing import Optional, List, Dict, Any, Union
 from dataclasses import dataclass, field
@@ -391,7 +393,231 @@ class GeminiClient:
             else:
                 print(f"[DEBUG] Active gem cleared")
 
+    def fetch_gems(self, include_predefined: bool = False) -> List[Dict[str, Any]]:
+        """
+        Fetch list of available gems (custom gems, optionally predefined).
+        
+        Args:
+            include_predefined: Whether to include predefined system gems (default: False, only custom)
+        
+        Returns:
+            List of gem dictionaries with keys: id, name, description, prompt, predefined
+        """
+        url = f"{self.BASE_URL}/_/BardChatUi/data/batchexecute"
+        
+        rpcid = "CNgdBe"  # LIST_GEMS RPC ID
+        
+        gems = []
+        
+        # Fetch custom gems first (most important for our use case)
+        requests_to_make = [
+            ("[2]", "custom", False),  # Custom gems
+        ]
+        if include_predefined:
+            requests_to_make.append(("[3]", "system", True))  # Predefined gems
+        
+        for payload, identifier, is_predefined in requests_to_make:
+            try:
+                # Build single request (not batch - simpler and more reliable)
+                req_data = json.dumps([
+                    [[rpcid, payload, None, identifier]]
+                ], ensure_ascii=False, separators=(',', ':'))
+                
+                params = {
+                    "rpcids": rpcid,
+                    "source-path": "/app",
+                    "f.sid": "",
+                    "bl": self.bl,
+                    "hl": "zh-CN",
+                    "_reqid": str(self.request_count * 100000 + random.randint(10000, 99999)),
+                    "rt": "c",
+                }
+                
+                form_data = {
+                    "f.req": req_data,
+                    "at": self.snlm0e,
+                }
+                
+                if self.debug:
+                    print(f"[DEBUG] Fetching {identifier} gems...")
+                
+                resp = self.session.post(url, params=params, data=form_data, timeout=30.0)
+                resp.raise_for_status()
+                self.request_count += 1
+                
+                # Parse response - format based on reference project
+                # Response: )]}'\n\nXXX\n[["wrb.fr","CNgdBe","[[...gems data...]]",null,null,null,"custom"]]
+                text = resp.text
+                lines = text.split('\n')
+                
+                if self.debug:
+                    print(f"[DEBUG] Response has {len(lines)} lines")
+                
+                # Find the line with actual data (usually line index 2 or 3)
+                for i, line in enumerate(lines):
+                    line = line.strip()
+                    if not line or not line.startswith('['):
+                        continue
+                    
+                    try:
+                        response_json = json.loads(line)
+                        
+                        # Navigate response structure: [[...], [...], ...]
+                        for part in response_json:
+                            if not isinstance(part, list) or len(part) < 3:
+                                continue
+                            
+                            # Check if this is our RPC response
+                            if part[0] != "wrb.fr" or part[1] != rpcid:
+                                continue
+                            
+                            # part[2] contains the gems data as JSON string
+                            gems_container = json.loads(part[2])
+                            
+                            # if self.debug:
+                            #     print(f"[DEBUG] Gems container structure: {type(gems_container)}, len={len(gems_container) if gems_container else 0}")
+                            
+                            # Custom gems: container[2] has the gems list
+                            # Predefined: same structure
+                            if gems_container and len(gems_container) > 2:
+                                gems_list = gems_container[2]
+                                
+                                if self.debug:
+                                    print(f"[DEBUG] Found {len(gems_list) if gems_list else 0} {identifier} gems in response")
+                                
+                                if gems_list:
+                                    for gem in gems_list:
+                                        if gem and len(gem) > 1:
+                                            gem_info = {
+                                                "id": gem[0],
+                                                "name": gem[1][0] if gem[1] and len(gem[1]) > 0 else "",
+                                                "description": gem[1][1] if gem[1] and len(gem[1]) > 1 else "",
+                                                "prompt": gem[2][0] if len(gem) > 2 and gem[2] and len(gem[2]) > 0 else None,
+                                                "predefined": is_predefined,
+                                            }
+                                            gems.append(gem_info)
+                                            if self.debug:
+                                                print(f"[DEBUG]   + {gem_info['name']} (id: {gem_info['id'][:20] if len(gem_info['id']) > 20 else gem_info['id']})")
+                            
+                            break  # Found our data, no need to continue
+                        
+                    except json.JSONDecodeError:
+                        continue
+                    
+            except Exception as e:
+                if self.debug:
+                    print(f"[DEBUG] Failed to fetch {identifier} gems: {e}")
+                    import traceback
+                    traceback.print_exc()
+        
+        if self.debug:
+            print(f"[DEBUG] Total gems found: {len(gems)}")
+        
+        return gems
 
+    # ============ Gem Mapping Storage ============
+    
+    GEM_MAPPING_FILE = os.path.join(os.path.dirname(__file__), "gem_mapping.json")
+    
+    def _load_gem_mapping(self) -> Dict[str, str]:
+        """Load the local gem mapping (prompt_hash -> gem_name)"""
+        try:
+            if os.path.exists(self.GEM_MAPPING_FILE):
+                with open(self.GEM_MAPPING_FILE, "r", encoding="utf-8") as f:
+                    return json.load(f)
+        except Exception as e:
+            if self.debug:
+                print(f"[DEBUG] Failed to load gem mapping: {e}")
+        return {}
+    
+    def _save_gem_mapping(self, mapping: Dict[str, str]):
+        """Save the gem mapping to local file"""
+        try:
+            with open(self.GEM_MAPPING_FILE, "w", encoding="utf-8") as f:
+                json.dump(mapping, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            if self.debug:
+                print(f"[DEBUG] Failed to save gem mapping: {e}")
+    
+    def _get_prompt_hash(self, prompt: str) -> str:
+        """Generate a hash for the system prompt"""
+        normalized = prompt.strip()
+        return hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:16]
+    
+    def _generate_gem_name(self, prompt: str) -> str:
+        """Generate a unique gem name based on prompt hash"""
+        prompt_hash = self._get_prompt_hash(prompt)
+        return f"sys_{prompt_hash}"
+
+    def find_gem_by_prompt(self, prompt: str) -> Optional[str]:
+        """
+        Find an existing gem that matches the given system prompt.
+        Uses local mapping (prompt_hash -> gem_name) to avoid truncation issues.
+        
+        Args:
+            prompt: The system prompt to search for
+            
+        Returns:
+            The gem ID if found, None otherwise
+        """
+        try:
+            prompt_hash = self._get_prompt_hash(prompt)
+            mapping = self._load_gem_mapping()
+            
+            if self.debug:
+                print(f"[DEBUG] Looking for prompt hash: {prompt_hash}")
+            
+            # Check if we have a mapping for this prompt
+            if prompt_hash not in mapping:
+                if self.debug:
+                    print(f"[DEBUG] No local mapping found for this prompt")
+                return None
+            
+            gem_name = mapping[prompt_hash]
+            if self.debug:
+                print(f"[DEBUG] Found local mapping: {prompt_hash} -> {gem_name}")
+            
+            # Fetch gems and find by name
+            gems = self.fetch_gems()
+            
+            for gem in gems:
+                if gem.get("name") == gem_name:
+                    if self.debug:
+                        print(f"[DEBUG] Found matching gem by name: {gem_name} (id: {gem['id']})")
+                    return gem["id"]
+            
+            # Gem was in mapping but not found in Gemini (maybe deleted)
+            if self.debug:
+                print(f"[DEBUG] Gem '{gem_name}' was in mapping but not found in Gemini")
+            # Remove stale mapping
+            del mapping[prompt_hash]
+            self._save_gem_mapping(mapping)
+            return None
+            
+        except Exception as e:
+            if self.debug:
+                print(f"[DEBUG] Error searching for gem: {e}")
+            return None
+    
+    def register_gem_mapping(self, prompt: str, gem_name: str):
+        """
+        Register a mapping between a prompt hash and gem name.
+        Call this after creating a new gem.
+        
+        Args:
+            prompt: The system prompt
+            gem_name: The name of the created gem
+        """
+        try:
+            prompt_hash = self._get_prompt_hash(prompt)
+            mapping = self._load_gem_mapping()
+            mapping[prompt_hash] = gem_name
+            self._save_gem_mapping(mapping)
+            if self.debug:
+                print(f"[DEBUG] Registered gem mapping: {prompt_hash} -> {gem_name}")
+        except Exception as e:
+            if self.debug:
+                print(f"[DEBUG] Failed to register gem mapping: {e}")
     
     def _parse_content(self, content: Union[str, List[Dict]]) -> tuple:
         """Parse OpenAI format content, return (text, images)"""

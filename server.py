@@ -1299,28 +1299,43 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
             # Create gem from system prompt if present (only if CREATE_GEMINI_GEMS is enabled)
             if CREATE_GEMINI_GEMS and use_gem and system_prompt:
                 try:
-                    # Generate a unique name for this gem session
-                    gem_name = f"system_{uuid.uuid4().hex[:8]}"
-                    print(f"[GEM] Creating gem with system prompt ({len(system_prompt)} chars)")
+                    # First, check if a gem with this system prompt already exists (via local mapping)
+                    print(f"[GEM] Searching for existing gem with matching system prompt ({len(system_prompt)} chars)...")
+                    existing_gem_id = client.find_gem_by_prompt(system_prompt)
                     
-                    gem_id = client.create_gem(
-                        name=gem_name,
-                        prompt=system_prompt,
-                        description="Auto-generated system prompt gem"
-                    )
-                    
-                    if gem_id:
-                        client.set_active_gem(gem_id)
-                        print(f"[GEM] Gem created and activated: {gem_id}")
+                    if existing_gem_id:
+                        # Reuse existing gem
+                        client.set_active_gem(existing_gem_id)
+                        print(f"[GEM] Reusing existing gem: {existing_gem_id}")
                         
                         # Remove system message from messages since it's now in the gem
                         messages = [m for m in messages if m.get("role") != "system"]
                     else:
-                        print(f"[GEM] Warning: Gem creation returned no ID, using system message in prompt")
-                        use_gem = False
+                        # Create a new gem with a deterministic name based on prompt hash
+                        gem_name = client._generate_gem_name(system_prompt)
+                        print(f"[GEM] No existing gem found, creating new gem with name: {gem_name}")
+                        
+                        gem_id = client.create_gem(
+                            name=gem_name,
+                            prompt=system_prompt,
+                            description="Auto-generated system prompt gem"
+                        )
+                        
+                        if gem_id:
+                            # Register the mapping for future lookups
+                            client.register_gem_mapping(system_prompt, gem_name)
+                            
+                            client.set_active_gem(gem_id)
+                            print(f"[GEM] Gem created and activated: {gem_id}")
+                            
+                            # Remove system message from messages since it's now in the gem
+                            messages = [m for m in messages if m.get("role") != "system"]
+                        else:
+                            print(f"[GEM] Warning: Gem creation returned no ID, using system message in prompt")
+                            use_gem = False
                         
                 except Exception as e:
-                    print(f"[GEM] Failed to create gem: {e}")
+                    print(f"[GEM] Failed to create/find gem: {e}")
                     print(f"[GEM] Falling back to including system message in prompt")
                     use_gem = False
             elif use_gem and not CREATE_GEMINI_GEMS:
