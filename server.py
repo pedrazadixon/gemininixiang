@@ -2,8 +2,8 @@
 Gemini OpenAI Compatible API Service
 
 Start: python server.py
-Admin: http://localhost:8000/admin
-API:   http://localhost:8000/v1
+Admin: http://localhost:11434/admin
+API:   http://localhost:11434/v1
 """
 
 from fastapi import FastAPI, HTTPException, Header, Request
@@ -24,7 +24,7 @@ import secrets
 # ============ Configuration ============
 API_KEY = "sk-gemini"
 HOST = "0.0.0.0"
-PORT = 8000
+PORT = 11434
 CONFIG_FILE = "config_data.json"
 # Admin login credentials
 ADMIN_USERNAME = "admin"
@@ -1503,8 +1503,8 @@ if __name__ == "__main__":
 ╔══════════════════════════════════════════════════════════╗
 ║           Gemini OpenAI Compatible API Server            ║
 ╠══════════════════════════════════════════════════════════╣
-║  Admin: http://localhost:{PORT}/admin                      ║
-║  API URL: http://localhost:{PORT}/v1                       ║
+║  Admin: http://localhost:{PORT}/admin                     ║
+║  API URL: http://localhost:{PORT}/v1                      ║
 ║  API Key:  {API_KEY}                                     ║
 ╚══════════════════════════════════════════════════════════╝
 """)
