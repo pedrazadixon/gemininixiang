@@ -292,28 +292,70 @@ def parse_tool_calls(content: str) -> tuple:
     Returns: (list of tool_calls, remaining text content)
     """
     tool_calls = []
-    
-    # Multiple matching patterns
-    patterns = [
-        r'```tool_call\s*\n?(.*?)\n?```',          # ```tool_call ... ```
-        r'```json\s*\n?(.*?)\n?```',               # ```json ... ``` (sometimes models use this)
-        r'```\s*\n?(\{[^`]*"name"[^`]*\})\n?```',  # ``` {...} ```
-    ]
-    
     matches = []
-    for pattern in patterns:
-        found = re.findall(pattern, content, re.DOTALL)
-        matches.extend(found)
+    remaining = content
     
-    # Also try to match JSON objects directly (without code block wrapper)
+    # Strategy: Find tool_call blocks by counting backticks
+    # Gemini may use 3, 4, or more backticks - we need to match the same count for closing
+    
+    # Find all positions of backtick sequences followed by 'tool_call' or 'json'
+    tool_call_pattern = re.compile(r'(`{3,})(tool_call|json)\s*\n?', re.IGNORECASE)
+    
+    processed_ranges = []  # Track ranges we've already processed
+    
+    for match in tool_call_pattern.finditer(content):
+        backticks = match.group(1)  # The opening backticks (e.g., ``` or ````)
+        backtick_count = len(backticks)
+        start_pos = match.start()
+        content_start = match.end()
+        
+        # Skip if this position is already processed
+        if any(start_pos >= r[0] and start_pos < r[1] for r in processed_ranges):
+            continue
+        
+        # Find the closing backticks - must be EXACTLY the same count at start of line or after newline
+        # We need to find backticks that are not inside a string
+        search_pos = content_start
+        found_end = False
+        
+        while search_pos < len(content):
+            # Look for the exact number of backticks
+            closing_pattern = re.compile(r'\n(`{' + str(backtick_count) + r'})(?:\s*$|\n|[^`])', re.MULTILINE)
+            closing_match = closing_pattern.search(content, search_pos)
+            
+            if not closing_match:
+                # Try without newline prefix (end of content)
+                closing_pattern2 = re.compile(r'(`{' + str(backtick_count) + r'})(?:\s*$)')
+                closing_match = closing_pattern2.search(content, search_pos)
+            
+            if closing_match:
+                end_pos = closing_match.start(1)
+                json_content = content[content_start:end_pos].strip()
+                
+                # Try to extract JSON from this content
+                json_str = extract_json_from_content(json_content)
+                if json_str:
+                    matches.append(json_str)
+                    processed_ranges.append((start_pos, closing_match.end(1)))
+                    found_end = True
+                break
+            else:
+                break
+    
+    # Fallback: Also try to match JSON objects directly (without code block wrapper)
     if not matches:
-        json_pattern = r'\{[^{}]*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[^{}]*\}[^{}]*\}'
-        matches = re.findall(json_pattern, content, re.DOTALL)
+        start_positions = [m.start() for m in re.finditer(r'\{"name"\s*:', content)]
+        for start in start_positions:
+            try:
+                json_str = extract_json_object(content[start:])
+                if json_str:
+                    matches.append(json_str)
+            except:
+                continue
     
     for i, match in enumerate(matches):
         try:
             match = match.strip()
-            # Try to parse JSON
             call_data = json.loads(match)
             if call_data.get("name"):
                 tool_calls.append({
@@ -325,16 +367,67 @@ def parse_tool_calls(content: str) -> tuple:
                         "arguments": json.dumps(call_data.get("arguments", {}), ensure_ascii=False)
                     }
                 })
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            print(f"[DEBUG] JSON parse error: {e}")
             continue
     
-    # Remove tool call sections
-    remaining = content
-    for pattern in patterns:
-        remaining = re.sub(pattern, '', remaining, flags=re.DOTALL)
+    # Remove tool call sections from remaining content
+    for start, end in processed_ranges:
+        remaining = remaining[:start] + remaining[end:]
     remaining = remaining.strip()
     
     return tool_calls, remaining
+
+
+def extract_json_from_content(content: str) -> str:
+    """
+    Extract a JSON object from content that may contain other text.
+    Handles nested structures properly.
+    """
+    # Find the start of the JSON object
+    json_start = content.find('{')
+    if json_start == -1:
+        return None
+    
+    return extract_json_object(content[json_start:])
+
+
+def extract_json_object(text: str) -> str:
+    """
+    Extract a balanced JSON object from text starting at position 0.
+    Handles nested objects, arrays, and escaped strings properly.
+    """
+    if not text or text[0] != '{':
+        return None
+    
+    depth = 0
+    in_string = False
+    escape_next = False
+    
+    for i, char in enumerate(text):
+        if escape_next:
+            escape_next = False
+            continue
+            
+        if char == '\\' and in_string:
+            escape_next = True
+            continue
+            
+        if char == '"' and not escape_next:
+            in_string = not in_string
+            continue
+            
+        if in_string:
+            continue
+            
+        if char == '{':
+            depth += 1
+        elif char == '}':
+            depth -= 1
+            if depth == 0:
+                return text[:i+1]
+    
+    return None
 
 
 def load_config():
@@ -1371,6 +1464,7 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
         response = client.chat(messages=messages, model=request.model)
         
         reply_content = response.choices[0].message.content
+        print(f"[DEBUG] Raw reply_content ({len(reply_content)} chars): {reply_content[:1000]}...")
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
         created_time = int(time.time())
         
@@ -1379,6 +1473,10 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
         final_content = reply_content
         if request.tools:
             tool_calls, final_content = parse_tool_calls(reply_content)
+            if tool_calls:
+                print(f"[DEBUG] Parsed {len(tool_calls)} tool calls:")
+                for tc in tool_calls:
+                    print(f"[DEBUG]   - {tc['function']['name']}: args length = {len(tc['function']['arguments'])}")
         
         # Handle streaming response
         if request.stream:
@@ -1410,7 +1508,9 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
                                 "finish_reason": None
                             }]
                         }
-                        yield f"data: {json.dumps(chunk_data)}\n\n"
+                        chunk_json = json.dumps(chunk_data, ensure_ascii=False)
+                        print(f"[DEBUG STREAM] tool_call chunk: {chunk_json[:500]}...")
+                        yield f"data: {chunk_json}\n\n"
                 else:
                     chunk_data = {
                         "id": completion_id,
